@@ -967,267 +967,371 @@
     }
 
     async function showExploreOverlay() {
-      try {
-        // remove any existing explore panel so we always start fresh
-        const existing = box.querySelector("#explorePanel");
-        if (existing) existing.remove();
+  try {
+    const existing = box.querySelector("#explorePanel");
+    if (existing) existing.remove();
 
-        const ex = document.createElement("div");
-        ex.id = "explorePanel";
-        Object.assign(ex.style, {
-          position: "absolute",
-          left: "6px",
-          top: "64px",
-          right: "6px",
-          bottom: "72px",
-          zIndex: 50,
-          display: "flex",
-          alignItems: "stretch",
-          justifyContent: "center",
-        });
+    const ex = document.createElement("div");
+    ex.id = "explorePanel";
+    Object.assign(ex.style, {
+      position: "absolute",
+      left: "0",
+      top: "0",
+      right: "0",
+      bottom: "0",
+      zIndex: 50,
+      display: "flex",
+      flexDirection: "column",
+      background: "#111214",
+      borderRadius: "12px",
+      overflow: "hidden",
+    });
 
-        const panel = document.createElement("div");
-        Object.assign(panel.style, {
-          width: "100%",
-          height: "100%",
-          background: "linear-gradient(180deg,#0b0c0e,#111214)",
-          borderRadius: "10px",
-          padding: "12px",
-          boxShadow: "0 18px 40px rgba(0,0,0,0.7)",
-          border: "1px solid rgba(255,255,255,0.03)",
-          color: "#e6eefc",
-          display: "flex",
-          flexDirection: "column",
-          gap: "10px",
-          overflow: "hidden"
-        });
+    // --- Header ---
+    const header = document.createElement("div");
+    Object.assign(header.style, {
+      padding: "12px 14px",
+      background: "#0d0e10",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      flexShrink: "0",
+    });
+    header.innerHTML = `
+      <div style="font-size:15px; font-weight:700; color:#e6eefc; flex:1;">Explore Rooms</div>
+      <button id="exploreClose" style="background:#333; border:none; padding:7px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:13px;">Close</button>
+    `;
+    ex.appendChild(header);
 
-        panel.innerHTML = `
-          <div style="display:flex; align-items:center; gap:8px;">
-            <div style="display:flex; flex-direction:column;">
-              <div style="font-size:16px; font-weight:700;">Explore</div>
-              <div style="font-size:12px; color:#9fb0e6; opacity:0.85;">Popular and recently active chats</div>
-            </div>
-            <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
-              <input id="exploreSearch" placeholder="Search rooms..." style="padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:#0c0d0f; color:#fff; outline:none;">
-              <select id="exploreSort" style="padding:8px; border-radius:8px; background:#0c0d0f; color:#fff; border:1px solid rgba(255,255,255,0.04);">
-                <option value="last_activity">Recent</option>
-                <option value="message_count">Most messages</option>
-              </select>
-              <button id="exploreBack" style="background:#666; border:none; padding:8px 10px; border-radius:8px; cursor:pointer; color:#fff;">Back</button>
-              <button id="closeExplore" style="background:#444; border:none; padding:8px 10px; border-radius:8px; cursor:pointer; color:#fff;">Close</button>
-            </div>
-          </div>
-          <div id="exploreList" style="flex:1; overflow:auto; display:flex; flex-direction:column; gap:8px; padding-right:6px;"></div>
-          <div style="display:flex; gap:8px; justify-content:flex-end;">
-            <button id="refreshExplore" style="padding:8px 12px; border-radius:8px; border:none; background:#2f855a; color:white; cursor:pointer;">Refresh</button>
-          </div>
-        `;
+    // --- Search bar ---
+    const searchRow = document.createElement("div");
+    Object.assign(searchRow.style, {
+      padding: "10px 14px 6px",
+      flexShrink: "0",
+      background: "#111214",
+    });
+    searchRow.innerHTML = `
+      <input id="exploreSearch" placeholder="Search rooms..." style="
+        width:100%;
+        box-sizing:border-box;
+        padding:10px 12px;
+        border-radius:10px;
+        border:1px solid rgba(255,255,255,0.06);
+        background:#0c0d0f;
+        color:#fff;
+        font-size:14px;
+        outline:none;
+      ">
+    `;
+    ex.appendChild(searchRow);
 
-        ex.appendChild(panel);
-        box.appendChild(ex);
-        registerEl(ex);
+    // --- Filter pills ---
+    const pillsRow = document.createElement("div");
+    Object.assign(pillsRow.style, {
+      padding: "6px 14px 10px",
+      display: "flex",
+      gap: "8px",
+      flexShrink: "0",
+      background: "#111214",
+      borderBottom: "1px solid rgba(255,255,255,0.04)",
+    });
 
-        const closeBtn = panel.querySelector("#closeExplore");
-        const backBtn = panel.querySelector("#exploreBack");
-        const refreshBtn = panel.querySelector("#refreshExplore");
-        const searchInput = panel.querySelector("#exploreSearch");
-        const sortSelect = panel.querySelector("#exploreSort");
-        const listEl = panel.querySelector("#exploreList");
+    function makePill(label, id) {
+      const pill = document.createElement("button");
+      pill.id = id;
+      pill.textContent = label;
+      Object.assign(pill.style, {
+        padding: "6px 14px",
+        borderRadius: "999px",
+        border: "1px solid rgba(255,255,255,0.08)",
+        background: "transparent",
+        color: "#9fb0e6",
+        cursor: "pointer",
+        fontSize: "13px",
+        fontWeight: "600",
+        transition: "all 0.15s",
+      });
+      return pill;
+    }
 
-        // Pagination & search state
-        let pageSize = 30;
-        let currentLimit = pageSize;
-        let isLoading = false;
-        let exhausted = false;
-        let lastQuery = "";
-        let lastSort = sortSelect.value || "last_activity";
-        let debounceTimer = null;
+    const recentPill = makePill("🕐 Recent", "pillRecent");
+    const activePill = makePill("🔥 Most Active", "pillActive");
+    pillsRow.appendChild(recentPill);
+    pillsRow.appendChild(activePill);
+    ex.appendChild(pillsRow);
 
-        // Load and render using progressive-limit strategy:
-        // we request server with currentLimit and render results. When user scrolls near bottom,
-        // increase currentLimit and re-fetch. We also apply client-side filter as a fallback if server doesn't support q.
-        async function loadAndRender(reset = false) {
-          if (isLoading) return;
-          isLoading = true;
-          if (reset) {
-            currentLimit = pageSize;
-            exhausted = false;
-            listEl.innerHTML = `<div style="opacity:0.85; padding:8px;">Loading...</div>`;
-          } else {
-            // show inline spinner at bottom
-            const s = panel.querySelector("#exploreLoading");
-            if (!s) {
-              const spinner = document.createElement("div");
-              spinner.id = "exploreLoading";
-              spinner.style.opacity = "0.85";
-              spinner.style.padding = "8px";
-              spinner.textContent = "Loading more...";
-              listEl.appendChild(spinner);
-            }
-          }
+    // --- List ---
+    const listEl = document.createElement("div");
+    Object.assign(listEl.style, {
+      flex: "1",
+      overflowY: "auto",
+      padding: "10px 14px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "8px",
+      WebkitOverflowScrolling: "touch",
+    });
+    ex.appendChild(listEl);
 
-          const sort = sortSelect.value || "last_activity";
-          const q = (searchInput.value || "").trim();
-          lastSort = sort;
-          lastQuery = q;
+    box.appendChild(ex);
 
-          try {
-            const rooms = await fetchExplore(currentLimit, sort, q);
-            // If server doesn't support q, fallback to client-side filtering:
-            let filtered = rooms;
-            if (q) {
-              const qlc = q.toLowerCase();
-              filtered = rooms.filter(r => String(r.room || "").toLowerCase().includes(qlc));
-            }
+    // --- State ---
+    const searchInput = ex.querySelector("#exploreSearch");
+    const closeBtn = ex.querySelector("#exploreClose");
 
-            // If returned count is less than the requested limit, mark exhausted.
-            if ((filtered.length || 0) < currentLimit) exhausted = true;
+    let filterRecent = false;
+    let filterActive = false;
+    let allRooms = [];
+    let isLoading = false;
 
-            // render
-            listEl.innerHTML = "";
-            if (!filtered.length) {
-              listEl.innerHTML = `<div style="opacity:0.75; padding:8px;">No rooms found.</div>`;
-              isLoading = false;
-              return;
-            }
-
-            for (const r of filtered) {
-              const card = document.createElement("div");
-              Object.assign(card.style, {
-                display: "flex",
-                gap: "10px",
-                alignItems: "center",
-                padding: "10px",
-                borderRadius: "8px",
-                background: "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01))",
-                border: "1px solid rgba(255,255,255,0.02)",
-              });
-
-              const left = document.createElement("div");
-              left.style.display = "flex";
-              left.style.flexDirection = "column";
-              left.style.minWidth = "0";
-              left.innerHTML = `
-                <div style="font-weight:700; font-size:14px; color:#e6eefc; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(r.room)}</div>
-                <div style="font-size:12px; color:#9fb0e6; opacity:0.9;">${(r.message_count||0)} messages • ${r.last_activity ? timeAgoShort(new Date(Number(r.last_activity))) : "no activity"}</div>
-              `;
-              card.appendChild(left);
-
-              const meta = document.createElement("div");
-              meta.style.display = "flex";
-              meta.style.flexDirection = "column";
-              meta.style.alignItems = "flex-end";
-              meta.style.gap = "6px";
-
-              const claimedBy = claimedChatsMap[r.room] && claimedChatsMap[r.room].claimed_by ? claimedChatsMap[r.room].claimed_by : null;
-              if (claimedBy) {
-                const badge = document.createElement("div");
-                badge.textContent = `claimed by ${claimedBy}`;
-                badge.style.fontSize = "12px";
-                badge.style.color = "#fff";
-                badge.style.background = "rgba(255,255,255,0.04)";
-                badge.style.padding = "4px 8px";
-                badge.style.borderRadius = "999px";
-                meta.appendChild(badge);
-              } else {
-                const badge = document.createElement("div");
-                badge.textContent = `open`;
-                badge.style.fontSize = "12px";
-                badge.style.color = "#fff";
-                badge.style.background = "rgba(0,0,0,0.14)";
-                badge.style.padding = "4px 8px";
-                badge.style.borderRadius = "999px";
-                meta.appendChild(badge);
-              }
-
-              const joinBtn = document.createElement("button");
-              joinBtn.textContent = "Join";
-              Object.assign(joinBtn.style, {
-                padding: "8px 10px",
-                borderRadius: "8px",
-                border: "none",
-                background: "#2b6cb0",
-                color: "#fff",
-                cursor: "pointer",
-                fontSize: "13px"
-              });
-              joinBtn.addEventListener("click", async () => {
-                addRoomToList(r.room);
-                try { await box.switchRoom ? box.switchRoom(r.room) : (async () => {})(); } catch (e) {}
-                const p = box.querySelector("#explorePanel"); if (p) p.remove();
-              });
-              meta.appendChild(joinBtn);
-              card.appendChild(meta);
-
-              listEl.appendChild(card);
-            }
-
-            // if not exhausted, add a sentinel loader element for infinite scroll
-            if (!exhausted) {
-              const sentinel = document.createElement("div");
-              sentinel.id = "exploreSentinel";
-              sentinel.style.padding = "8px";
-              sentinel.style.opacity = "0.8";
-              sentinel.textContent = "Scroll to load more...";
-              listEl.appendChild(sentinel);
-            }
-          } catch (err) {
-            console.error("loadAndRender error", err);
-            listEl.innerHTML = `<div style="opacity:0.85; padding:8px;">Could not load explore data</div>`;
-          }
-          isLoading = false;
-        }
-
-        // Scroll-to-load handler (increases currentLimit progressively)
-        let scrollHandlerAttached = false;
-        function attachScrollHandler() {
-          if (scrollHandlerAttached) return;
-          scrollHandlerAttached = true;
-          let onScroll = () => {
-            try {
-              if (isLoading || exhausted) return;
-              const scrollPos = listEl.scrollTop + listEl.clientHeight;
-              const threshold = listEl.scrollHeight - 120; // 120px from bottom
-              if (scrollPos >= threshold) {
-                // increase limit and re-fetch
-                currentLimit += pageSize;
-                loadAndRender(false);
-              }
-            } catch (e) {
-              console.error("explore onScroll error", e);
-            }
-          };
-          listEl.addEventListener("scroll", onScroll);
-        }
-
-        // Debounced search: reset pagination and load
-        function onSearchInput() {
-          if (debounceTimer) clearTimeout(debounceTimer);
-          debounceTimer = setTimeout(() => {
-            currentLimit = pageSize;
-            exhausted = false;
-            loadAndRender(true);
-          }, 300);
-        }
-
-        // wire up controls
-        closeBtn.addEventListener("click", () => { const p = box.querySelector("#explorePanel"); if (p) p.remove(); });
-        backBtn.addEventListener("click", () => { const p = box.querySelector("#explorePanel"); if (p) p.remove(); showRoomsOverlay(); });
-        refreshBtn.addEventListener("click", () => { currentLimit = pageSize; exhausted = false; loadAndRender(true); });
-        searchInput.addEventListener("input", onSearchInput);
-        sortSelect.addEventListener("change", () => { currentLimit = pageSize; exhausted = false; loadAndRender(true); });
-
-        // initial load
-        await loadAndRender(true);
-        attachScrollHandler();
-
-      } catch (err) {
-        console.error("showExploreOverlay error:", err);
-        alert("Could not open Explore (see console for details).");
+    function setPillActive(pill, active) {
+      if (active) {
+        pill.style.background = "#5865f2";
+        pill.style.color = "#fff";
+        pill.style.borderColor = "#5865f2";
+      } else {
+        pill.style.background = "transparent";
+        pill.style.color = "#9fb0e6";
+        pill.style.borderColor = "rgba(255,255,255,0.08)";
       }
     }
 
+    // --- Scoring & sorting ---
+    function getSortedRooms(rooms, query) {
+      let list = rooms.slice();
+
+      // search filter
+      if (query && query.trim()) {
+        const q = query.trim().toLowerCase();
+        list = list.filter(r => String(r.room || "").toLowerCase().includes(q));
+      }
+
+      if (!filterRecent && !filterActive) {
+        // default: just by last_activity
+        return list.sort((a, b) => (Number(b.last_activity) || 0) - (Number(a.last_activity) || 0));
+      }
+
+      if (filterRecent && !filterActive) {
+        return list.sort((a, b) => (Number(b.last_activity) || 0) - (Number(a.last_activity) || 0));
+      }
+
+      if (filterActive && !filterRecent) {
+        return list.sort((a, b) => (Number(b.message_count) || 0) - (Number(a.message_count) || 0));
+      }
+
+      // Both active — combined normalised score
+      const maxActivity = Math.max(...list.map(r => Number(r.last_activity) || 0), 1);
+      const minActivity = Math.min(...list.map(r => Number(r.last_activity) || 0), 0);
+      const maxCount = Math.max(...list.map(r => Number(r.message_count) || 0), 1);
+
+      const activityRange = maxActivity - minActivity || 1;
+
+      return list.sort((a, b) => {
+        const scoreA =
+          0.5 * ((Number(a.last_activity) || 0) - minActivity) / activityRange +
+          0.5 * (Number(a.message_count) || 0) / maxCount;
+        const scoreB =
+          0.5 * ((Number(b.last_activity) || 0) - minActivity) / activityRange +
+          0.5 * (Number(b.message_count) || 0) / maxCount;
+        return scoreB - scoreA;
+      });
+    }
+
+    // --- Render ---
+    function renderList() {
+      const query = searchInput.value || "";
+      const sorted = getSortedRooms(allRooms, query);
+      listEl.innerHTML = "";
+
+      if (!sorted.length) {
+        const empty = document.createElement("div");
+        Object.assign(empty.style, { opacity: "0.6", fontSize: "14px", padding: "16px 0", textAlign: "center", color: "#9fb0e6" });
+        empty.textContent = allRooms.length ? "No rooms match your search." : "No rooms found.";
+        listEl.appendChild(empty);
+        return;
+      }
+
+      for (const r of sorted) {
+        const card = document.createElement("div");
+        Object.assign(card.style, {
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          padding: "12px",
+          borderRadius: "10px",
+          background: "linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
+          border: "1px solid rgba(255,255,255,0.04)",
+          cursor: "default",
+        });
+
+        // Icon
+        const icon = document.createElement("div");
+        Object.assign(icon.style, {
+          width: "40px",
+          height: "40px",
+          borderRadius: "12px",
+          background: "#1e2030",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: "18px",
+          flexShrink: "0",
+          border: "1px solid rgba(255,255,255,0.04)",
+        });
+        icon.textContent = "💬";
+        card.appendChild(icon);
+
+        // Info
+        const info = document.createElement("div");
+        Object.assign(info.style, {
+          flex: "1",
+          minWidth: "0",
+          display: "flex",
+          flexDirection: "column",
+          gap: "3px",
+        });
+
+        const nameEl = document.createElement("div");
+        Object.assign(nameEl.style, {
+          fontWeight: "700",
+          fontSize: "14px",
+          color: "#e6eefc",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        });
+        nameEl.textContent = r.room;
+        info.appendChild(nameEl);
+
+        const statsEl = document.createElement("div");
+        Object.assign(statsEl.style, {
+          fontSize: "12px",
+          color: "#7289da",
+          display: "flex",
+          gap: "8px",
+          alignItems: "center",
+        });
+
+        const msgCount = document.createElement("span");
+        msgCount.textContent = `💬 ${Number(r.message_count) || 0}`;
+        statsEl.appendChild(msgCount);
+
+        const dot = document.createElement("span");
+        dot.textContent = "·";
+        dot.style.opacity = "0.4";
+        statsEl.appendChild(dot);
+
+        const lastActive = document.createElement("span");
+        lastActive.textContent = r.last_activity ? `🕐 ${timeAgoShort(new Date(Number(r.last_activity)))}` : "No activity";
+        statsEl.appendChild(lastActive);
+
+        info.appendChild(statsEl);
+
+        // Claimed badge
+        const claimedInfo = claimedChatsMap[r.room];
+        if (claimedInfo && claimedInfo.claimed_by) {
+          const badge = document.createElement("div");
+          Object.assign(badge.style, {
+            fontSize: "11px",
+            color: "#a0aec0",
+            background: "rgba(255,255,255,0.04)",
+            padding: "2px 8px",
+            borderRadius: "999px",
+            marginTop: "2px",
+            display: "inline-block",
+            width: "fit-content",
+          });
+          badge.textContent = `🔒 ${claimedInfo.claimed_by}`;
+          info.appendChild(badge);
+        } else {
+          const badge = document.createElement("div");
+          Object.assign(badge.style, {
+            fontSize: "11px",
+            color: "#68d391",
+            background: "rgba(104,211,145,0.08)",
+            padding: "2px 8px",
+            borderRadius: "999px",
+            marginTop: "2px",
+            display: "inline-block",
+            width: "fit-content",
+          });
+          badge.textContent = "✓ Open";
+          info.appendChild(badge);
+        }
+
+        card.appendChild(info);
+
+        // Join button
+        const joinBtn = document.createElement("button");
+        joinBtn.textContent = "Join";
+        Object.assign(joinBtn.style, {
+          padding: "8px 14px",
+          borderRadius: "8px",
+          border: "none",
+          background: "#5865f2",
+          color: "#fff",
+          cursor: "pointer",
+          fontSize: "13px",
+          fontWeight: "600",
+          flexShrink: "0",
+          whiteSpace: "nowrap",
+        });
+        joinBtn.addEventListener("click", async () => {
+          addRoomToList(r.room);
+          ex.remove();
+          await switchRoom(r.room);
+        });
+        card.appendChild(joinBtn);
+
+        listEl.appendChild(card);
+      }
+    }
+
+    // --- Load ---
+    async function loadRooms() {
+      if (isLoading) return;
+      isLoading = true;
+      listEl.innerHTML = `<div style="opacity:0.6; font-size:14px; padding:16px 0; text-align:center; color:#9fb0e6;">Loading...</div>`;
+      try {
+        // fetch enough for both sort modes to work well together
+        allRooms = await fetchExplore(100, "last_activity");
+      } catch (e) {
+        allRooms = [];
+      }
+      isLoading = false;
+      renderList();
+    }
+
+    // --- Wire up ---
+    closeBtn.addEventListener("click", () => ex.remove());
+
+    recentPill.addEventListener("click", () => {
+      filterRecent = !filterRecent;
+      setPillActive(recentPill, filterRecent);
+      renderList();
+    });
+
+    activePill.addEventListener("click", () => {
+      filterActive = !filterActive;
+      setPillActive(activePill, filterActive);
+      renderList();
+    });
+
+    let searchDebounce = null;
+    searchInput.addEventListener("input", () => {
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => renderList(), 250);
+    });
+
+    // initial load
+    await loadRooms();
+
+  } catch (err) {
+    console.error("showExploreOverlay error:", err);
+    alert("Could not open Explore (see console for details).");
+  }
+}
     // Wire Explore button defensively
     if (openExploreBtn) {
       openExploreBtn.addEventListener("click", () => {
