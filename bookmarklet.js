@@ -1347,130 +1347,411 @@
       return null;
     }
 
-    function makeChatController() {
-      return {
-        active: true,
-        paused: false,
-        backoffMs: 1500,
-        errorBackoffMs: 3000,
-        lastCount: 0,
-        lastMessages: [],
-        async getMessages() {
-          const url = `${CHAT_BASE}/room/${encodeURIComponent(currentRoom)}/messages`;
-          let proof = await fetchRoomProof(token, currentRoom);
-          const headers = {};
-          if (token) headers.Authorization = token;
-          if (proof) headers["X-Room-Auth"] = proof;
-          const pwd = getRoomPassword(currentRoom);
-          if (pwd) headers["X-Room-Password"] = pwd;
-          const res = await fetchWithTimeout(url, { headers }, 8000);
-          if (res.status === 401 || res.status === 403) {
-            const ans = await promptPasswordForRoom(currentRoom, "access");
-            if (!ans || !ans.password) throw new Error("Auth required");
-            if (ans.remember) {
-              const saved = await postSaveRoomPassword(token, currentRoom, ans.password);
-              if (saved) userRoomPasswords[currentRoom] = ans.password;
-            } else {
-              sessionRoomPasswords[currentRoom] = ans.password;
-            }
-            delete roomProofs[currentRoom];
-            const proof2 = await fetchRoomProof(token, currentRoom);
-            const headers2 = {};
-            if (token) headers2.Authorization = token;
-            if (proof2) headers2["X-Room-Auth"] = proof2;
-            headers2["X-Room-Password"] = ans.password;
-            const res2 = await fetchWithTimeout(url, { headers: headers2 }, 8000);
-            if (res2.status === 401 || res2.status === 403) throw new Error("Auth failed");
-            return res2.json();
-          }
-          return res.json();
-        },
-        async sendMessage(text) {
-          const url = `${CHAT_BASE}/room/${encodeURIComponent(currentRoom)}/send`;
-          let proof = await fetchRoomProof(token, currentRoom);
-          const headers = { "Content-Type": "application/json" };
-          if (token) headers.Authorization = token;
-          if (proof) headers["X-Room-Auth"] = proof;
-          const pwd = getRoomPassword(currentRoom);
-          if (pwd) headers["X-Room-Password"] = pwd;
-          const res = await fetchWithTimeout(url, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({ text })
-          }, 8000);
-          if (res.status === 401 || res.status === 403) {
-            const ans = await promptPasswordForRoom(currentRoom, "access");
-            if (!ans || !ans.password) throw new Error("Auth required");
-            if (ans.remember) {
-              const saved = await postSaveRoomPassword(token, currentRoom, ans.password);
-              if (saved) userRoomPasswords[currentRoom] = ans.password;
-            } else {
-              sessionRoomPasswords[currentRoom] = ans.password;
-            }
-            delete roomProofs[currentRoom];
-            const proof2 = await fetchRoomProof(token, currentRoom);
-            const headers2 = { "Content-Type": "application/json" };
-            if (token) headers2.Authorization = token;
-            if (proof2) headers2["X-Room-Auth"] = proof2;
-            headers2["X-Room-Password"] = ans.password;
-            const res2 = await fetchWithTimeout(url, {
-              method: "POST",
-              headers: headers2,
-              body: JSON.stringify({ text })
-            }, 8000);
-            if (res2.status === 401 || res2.status === 403) throw new Error("Auth failed");
-            return res2.json();
-          }
-          return res.json();
-        },
-        isUserAtBottom() {
-          const threshold = 80;
-          return (msgBox.scrollHeight - (msgBox.scrollTop + msgBox.clientHeight)) < threshold;
-        },
-        async loadMessagesOnce({ forceScroll = false } = {}) {
-          let data;
-          try { data = await this.getMessages(); } catch (e) { console.debug("Chat fetch error:", e); return; }
-          if (!data || !Array.isArray(data.messages)) return;
-          const newMessages = data.messages;
-          const { away: messagesAway } = (function() {
-            const pixelDist = msgBox.scrollHeight - (msgBox.scrollTop + msgBox.clientHeight);
-            const msgDivs = Array.from(msgBox.children).filter(n => n.tagName === "DIV");
-            let total = 0, count = 0;
-            for (const d of msgDivs) { const h = d.offsetHeight; if (h > 0) { total += h; count++; } }
-            const avg = count ? (total / count) : 60;
-            const away = Math.max(0, Math.round(pixelDist / Math.max(1, avg)));
-            return { away, pixelDist, avg };
-          })();
-          const wasAtBottom = this.isUserAtBottom();
+    // ---- WebSocket + Chat Controller ----
+function makeWsController() {
+  const SLOW_POLL_MS = 30000;
+  const WS_RECONNECT_BASE = 2000;
+  const WS_RECONNECT_MAX = 30000;
 
-          if (this.lastCount === 0 || newMessages.length < this.lastCount) {
-            msgBox.innerHTML = "";
-            msgBox.appendChild(newMsgBtn);
-            newMessages.forEach((m, i) => appendMessageToContainer(msgBox, m, i));
-            if (wasAtBottom || forceScroll) msgBox.scrollTop = msgBox.scrollHeight;
-          } else if (newMessages.length > this.lastCount) {
-            const startIndex = this.lastCount;
-            const closeEnoughInMsgs = messagesAway <= 2;
-            for (let i = startIndex; i < newMessages.length; i++) appendMessageToContainer(msgBox, newMessages[i], i);
-            if (wasAtBottom || closeEnoughInMsgs || forceScroll) {
-              msgBox.scrollTop = msgBox.scrollHeight;
-              newMsgBtn.style.display = "none";
-            } else newMsgBtn.style.display = "block";
-          }
-          this.lastCount = newMessages.length;
-          this.lastMessages = newMessages;
-        },
-        async pollLoop() {
-          while (this.active) {
-            try { if (!this.paused) await this.loadMessagesOnce(); await new Promise(r => setTimeout(r, this.backoffMs)); }
-            catch (e) { await new Promise(r => setTimeout(r, this.errorBackoffMs)); }
-          }
-        },
-        stop() { this.active = false; this.paused = true; },
-        pause() { this.paused = true; },
-        resume() { this.paused = false; }
-      };
+  let ws = null;
+  let wsReconnectTimer = null;
+  let wsReconnectDelay = WS_RECONNECT_BASE;
+  let wsActive = true;
+  let wsPaused = false;
+
+  let pollTimer = null;
+  let lastCount = 0;
+  let lastMessages = [];
+
+  // Presence
+  let currentUsers = [];
+
+  // Call state
+  let callState = null; // null | "outgoing" | "incoming" | "active"
+  let callPeer = null;  // username of other party
+  let peerConnection = null;
+  let localStream = null;
+  let pendingOffer = null; // stored offer SDP while waiting for user to accept
+
+  const ICE_SERVERS = [
+    { urls: "stun:stun.relay.metered.ca:80" },
+    {
+      urls: "turn:global.relay.metered.ca:80",
+      username: "951956895909a9291fb1adb3",
+      credential: "EGUb/agb91aFy24M"
+    },
+    {
+      urls: "turn:global.relay.metered.ca:80?transport=tcp",
+      username: "951956895909a9291fb1adb3",
+      credential: "EGUb/agb91aFy24M"
+    },
+    {
+      urls: "turn:global.relay.metered.ca:443",
+      username: "951956895909a9291fb1adb3",
+      credential: "EGUb/agb91aFy24M"
+    },
+    {
+      urls: "turns:global.relay.metered.ca:443?transport=tcp",
+      username: "951956895909a9291fb1adb3",
+      credential: "EGUb/agb91aFy24M"
     }
+  ];
+
+  // ---- WebSocket ----
+  async function connectWs() {
+    if (!wsActive || wsPaused) return;
+    try {
+      const proof = await fetchRoomProof(token, currentRoom);
+      if (!proof) {
+        scheduleReconnect();
+        return;
+      }
+      const wsUrl = `${CHAT_BASE.replace("https://", "wss://").replace("http://", "ws://")}/room/${encodeURIComponent(currentRoom)}?proof=${encodeURIComponent(proof)}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.addEventListener("open", () => {
+        wsReconnectDelay = WS_RECONNECT_BASE;
+        updateWsIndicator(true);
+      });
+
+      ws.addEventListener("message", (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === "chat") handleIncomingChatMessage(msg);
+          else if (msg.type === "presence") handlePresence(msg.users || []);
+          else if (msg.type && msg.type.startsWith("call-")) handleCallSignal(msg);
+        } catch (e) {}
+      });
+
+      ws.addEventListener("close", () => {
+        updateWsIndicator(false);
+        if (wsActive && !wsPaused) scheduleReconnect();
+      });
+
+      ws.addEventListener("error", () => {
+        updateWsIndicator(false);
+        try { ws.close(); } catch (e) {}
+        if (wsActive && !wsPaused) scheduleReconnect();
+      });
+
+    } catch (e) {
+      if (wsActive && !wsPaused) scheduleReconnect();
+    }
+  }
+
+  function scheduleReconnect() {
+    if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = setTimeout(() => {
+      wsReconnectDelay = Math.min(wsReconnectDelay * 1.5, WS_RECONNECT_MAX);
+      connectWs();
+    }, wsReconnectDelay);
+  }
+
+  function sendWs(data) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(data));
+      return true;
+    }
+    return false;
+  }
+
+  function closeWs() {
+    if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
+    if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+  }
+
+  // ---- Presence ----
+  function handlePresence(users) {
+    currentUsers = users.filter(u => u !== username);
+    renderUserList();
+  }
+
+  // ---- Incoming chat via WebSocket ----
+  function handleIncomingChatMessage(msg) {
+    const wasAtBottom = ctrl.isUserAtBottom();
+    appendMessageToContainer(msgBox, msg, lastMessages.length);
+    lastMessages.push(msg);
+    lastCount = lastMessages.length;
+    if (wasAtBottom) {
+      msgBox.scrollTop = msgBox.scrollHeight;
+      newMsgBtn.style.display = "none";
+    } else {
+      newMsgBtn.style.display = "block";
+    }
+    refreshTimestampsIn(msgBox);
+  }
+
+  // ---- Slow poll fallback ----
+  async function slowPoll() {
+    if (!wsActive || wsPaused) return;
+    try {
+      const data = await ctrl.getMessages();
+      if (!data || !Array.isArray(data.messages)) return;
+      const newMessages = data.messages;
+      if (newMessages.length !== lastCount) {
+        const wasAtBottom = ctrl.isUserAtBottom();
+        msgBox.innerHTML = "";
+        msgBox.appendChild(newMsgBtn);
+        newMessages.forEach((m, i) => appendMessageToContainer(msgBox, m, i));
+        lastCount = newMessages.length;
+        lastMessages = newMessages;
+        if (wasAtBottom) msgBox.scrollTop = msgBox.scrollHeight;
+      }
+    } catch (e) {}
+    if (wsActive) pollTimer = setTimeout(slowPoll, SLOW_POLL_MS);
+  }
+
+  // ---- Call signaling ----
+  function handleCallSignal(msg) {
+    switch (msg.type) {
+      case "call-offer":
+        if (callState) return; // already in a call
+        handleIncomingOffer(msg);
+        break;
+      case "call-answer":
+        if (callState === "outgoing" && peerConnection) {
+          peerConnection.setRemoteDescription(
+            new RTCSessionDescription({ type: "answer", sdp: msg.sdp })
+          ).catch(e => console.error("setRemoteDescription error", e));
+        }
+        break;
+      case "call-ice":
+        if (peerConnection && msg.candidate) {
+          peerConnection.addIceCandidate(
+            new RTCIceCandidate(msg.candidate)
+          ).catch(e => console.error("addIceCandidate error", e));
+        }
+        break;
+      case "call-end":
+      case "call-reject":
+        endCall(msg.type === "call-reject" ? "rejected" : "ended");
+        break;
+    }
+  }
+
+  // ---- Incoming offer ----
+  function handleIncomingOffer(msg) {
+    callState = "incoming";
+    callPeer = msg._from;
+    pendingOffer = msg.sdp;
+    showIncomingCallBanner(msg._from);
+  }
+
+  // ---- WebRTC ----
+  async function startCall(targetUsername) {
+    if (callState) { alert("Already in a call"); return; }
+    try {
+      callState = "outgoing";
+      callPeer = targetUsername;
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      peerConnection = createPeerConnection(targetUsername);
+      localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      sendWs({ type: "call-offer", to: targetUsername, sdp: offer.sdp });
+      showCallWindow(targetUsername, localStream, null);
+      minifyChat();
+    } catch (e) {
+      console.error("startCall error", e);
+      endCall("error");
+    }
+  }
+
+  async function acceptCall() {
+    if (callState !== "incoming" || !pendingOffer) return;
+    hideIncomingCallBanner();
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      peerConnection = createPeerConnection(callPeer);
+      localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+      await peerConnection.setRemoteDescription(
+        new RTCSessionDescription({ type: "offer", sdp: pendingOffer })
+      );
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      sendWs({ type: "call-answer", to: callPeer, sdp: answer.sdp });
+      callState = "active";
+      pendingOffer = null;
+      showCallWindow(callPeer, localStream, null);
+      minifyChat();
+    } catch (e) {
+      console.error("acceptCall error", e);
+      endCall("error");
+    }
+  }
+
+  function rejectCall() {
+    if (callState !== "incoming") return;
+    sendWs({ type: "call-reject", to: callPeer });
+    hideIncomingCallBanner();
+    callState = null;
+    callPeer = null;
+    pendingOffer = null;
+  }
+
+  function endCall(reason = "ended") {
+    if (callPeer && callState && callState !== "ended") {
+      sendWs({ type: "call-end", to: callPeer });
+    }
+    if (peerConnection) { try { peerConnection.close(); } catch (e) {} peerConnection = null; }
+    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+    callState = null;
+    callPeer = null;
+    pendingOffer = null;
+    hideCallWindow();
+    hideIncomingCallBanner();
+  }
+
+  function createPeerConnection(targetUsername) {
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        sendWs({ type: "call-ice", to: targetUsername, candidate: e.candidate });
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+        callState = "active";
+        updateCallStatus("🟢 Connected");
+      }
+      if (pc.iceConnectionState === "failed") {
+        updateCallStatus("❌ Connection failed");
+        endCall("failed");
+      }
+      if (pc.iceConnectionState === "disconnected") {
+        updateCallStatus("⚠️ Reconnecting...");
+      }
+    };
+
+    pc.ontrack = (e) => {
+      setRemoteStream(e.streams[0]);
+    };
+
+    return pc;
+  }
+
+  // ---- Public controller interface ----
+  const ctrl = {
+    active: true,
+    async getMessages() {
+      const url = `${CHAT_BASE}/room/${encodeURIComponent(currentRoom)}/messages`;
+      const proof = await fetchRoomProof(token, currentRoom);
+      const headers = {};
+      if (token) headers.Authorization = token;
+      if (proof) headers["X-Room-Auth"] = proof;
+      const pwd = getRoomPassword(currentRoom);
+      if (pwd) headers["X-Room-Password"] = pwd;
+      const res = await fetchWithTimeout(url, { headers }, 8000);
+      if (res.status === 401 || res.status === 403) {
+        const ans = await promptPasswordForRoom(currentRoom, "access");
+        if (!ans || !ans.password) throw new Error("Auth required");
+        if (ans.remember) {
+          const saved = await postSaveRoomPassword(token, currentRoom, ans.password);
+          if (saved) userRoomPasswords[currentRoom] = ans.password;
+        } else {
+          sessionRoomPasswords[currentRoom] = ans.password;
+        }
+        delete roomProofs[currentRoom];
+        const proof2 = await fetchRoomProof(token, currentRoom);
+        const headers2 = {};
+        if (token) headers2.Authorization = token;
+        if (proof2) headers2["X-Room-Auth"] = proof2;
+        headers2["X-Room-Password"] = ans.password;
+        const res2 = await fetchWithTimeout(url, { headers: headers2 }, 8000);
+        if (res2.status === 401 || res2.status === 403) throw new Error("Auth failed");
+        return res2.json();
+      }
+      return res.json();
+    },
+    async sendMessage(text) {
+      // Try WebSocket first
+      if (sendWs({ type: "chat", text })) return { success: true };
+      // Fall back to HTTP
+      const url = `${CHAT_BASE}/room/${encodeURIComponent(currentRoom)}/send`;
+      const proof = await fetchRoomProof(token, currentRoom);
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = token;
+      if (proof) headers["X-Room-Auth"] = proof;
+      const pwd = getRoomPassword(currentRoom);
+      if (pwd) headers["X-Room-Password"] = pwd;
+      const res = await fetchWithTimeout(url, {
+        method: "POST", headers,
+        body: JSON.stringify({ text })
+      }, 8000);
+      if (res.status === 401 || res.status === 403) {
+        const ans = await promptPasswordForRoom(currentRoom, "access");
+        if (!ans || !ans.password) throw new Error("Auth required");
+        if (ans.remember) {
+          const saved = await postSaveRoomPassword(token, currentRoom, ans.password);
+          if (saved) userRoomPasswords[currentRoom] = ans.password;
+        } else {
+          sessionRoomPasswords[currentRoom] = ans.password;
+        }
+        delete roomProofs[currentRoom];
+        const proof2 = await fetchRoomProof(token, currentRoom);
+        const headers2 = { "Content-Type": "application/json" };
+        if (token) headers2.Authorization = token;
+        if (proof2) headers2["X-Room-Auth"] = proof2;
+        headers2["X-Room-Password"] = ans.password;
+        const res2 = await fetchWithTimeout(url, {
+          method: "POST", headers: headers2,
+          body: JSON.stringify({ text })
+        }, 8000);
+        if (res2.status === 401 || res2.status === 403) throw new Error("Auth failed");
+        return res2.json();
+      }
+      return res.json();
+    },
+    isUserAtBottom() {
+      return (msgBox.scrollHeight - (msgBox.scrollTop + msgBox.clientHeight)) < 80;
+    },
+    async loadMessagesOnce({ forceScroll = false } = {}) {
+      let data;
+      try { data = await this.getMessages(); } catch (e) { return; }
+      if (!data || !Array.isArray(data.messages)) return;
+      const newMessages = data.messages;
+      const wasAtBottom = this.isUserAtBottom();
+      msgBox.innerHTML = "";
+      msgBox.appendChild(newMsgBtn);
+      newMessages.forEach((m, i) => appendMessageToContainer(msgBox, m, i));
+      lastCount = newMessages.length;
+      lastMessages = newMessages;
+      if (wasAtBottom || forceScroll) msgBox.scrollTop = msgBox.scrollHeight;
+    },
+    async start() {
+      await this.loadMessagesOnce({ forceScroll: true });
+      connectWs();
+      pollTimer = setTimeout(slowPoll, SLOW_POLL_MS);
+    },
+    stop() {
+      wsActive = false;
+      wsPaused = true;
+      closeWs();
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    },
+    pause() {
+      wsPaused = true;
+      closeWs();
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    },
+    resume() {
+      wsPaused = false;
+      wsActive = true;
+      connectWs();
+      pollTimer = setTimeout(slowPoll, SLOW_POLL_MS);
+    },
+    // Expose call methods
+    startCall,
+    acceptCall,
+    rejectCall,
+    endCall,
+    get currentUsers() { return currentUsers; }
+  };
+
+  return ctrl;
+}
 
     // initialize controller
     let chatController = makeChatController();
