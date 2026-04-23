@@ -603,42 +603,39 @@
       border: "1px solid rgba(255,255,255,0.03)"
     });
 
-    box.innerHTML = `
-      <div id="chatHeader" style="padding:12px; background:linear-gradient(180deg,#111214,#17181b); font-weight:600; text-align:center; position:relative; font-size:15px; display:flex; align-items:center; justify-content:center; gap:10px;">
+   box.innerHTML = `
+      <div id="chatHeader" style="padding:12px; background:linear-gradient(180deg,#111214,#17181b); font-weight:600; text-align:center; position:relative; font-size:15px; display:flex; align-items:center; justify-content:center; gap:10px; flex-shrink:0;">
         <div style="display:flex; gap:8px; align-items:center; position:absolute; left:12px;">
-          <button id="minifyChat" title="Minify" style="background:transparent; border:none; color:#bfc7ff; padding:6px; border-radius:8px; cursor:pointer;">_</button>
+          <button id="minifyChat" title="Minify" style="background:transparent; border:none; color:#bfc7ff; padding:8px; border-radius:8px; cursor:pointer; font-size:18px; min-width:44px; min-height:44px;">_</button>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
           <div style="font-weight:700; color:#e6eefc;">Friends Chat</div>
           <div id="book_username" style="font-weight:500; color:#9fb0e6; opacity:0.9;"></div>
+          <div id="wsIndicator" title="Connecting..." style="width:8px; height:8px; border-radius:50%; background:#fc8181; margin-left:4px;"></div>
         </div>
         <div style="position:absolute; right:12px; display:flex; gap:8px; align-items:center;">
-          <button id="closeChat" style="background:#ff6b6b; color:white; border:none; padding:6px 10px; border-radius:8px; cursor:pointer; font-size:13px;">Close</button>
+          <button id="callBtn" title="Call someone" style="background:#2f855a; color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; font-size:18px; min-width:44px; min-height:44px;">📞</button>
+          <button id="closeChat" style="background:#ff6b6b; color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; font-size:14px; min-width:44px; min-height:44px;">✕</button>
         </div>
       </div>
-
       <div style="padding:10px; display:flex; gap:8px; align-items:center; background:#141518; border-bottom:1px solid rgba(255,255,255,0.02);">
         <button id="openRoomsBtn" style="padding:8px 12px; border-radius:10px; border:none; background:#2f855a; color:white; cursor:pointer; font-size:13px;">Room</button>
         <button id="openExploreBtn" style="padding:8px 12px; border-radius:10px; border:none; background:#2b6cb0; color:white; cursor:pointer; font-size:13px;">Explore</button>
         <div id="currentRoomDisplay" style="font-size:13px; opacity:0.9; color:#ddd; margin-left:auto;">room: ${currentRoom}</div>
       </div>
-
       <div id="chatMessages" style="flex:1; padding:12px; overflow-y:auto; background:linear-gradient(180deg,#0f1113,#141518); display:flex; flex-direction: column; gap:8px; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; touch-action:auto; position:relative;"></div>
-
       <div id="imageInputRow" style="display:none; padding:8px 10px; background:#0f1113; gap:8px; align-items:center;">
         <input id="imageUrlInput" placeholder="Paste image URL (png/jpg/gif/webp...)" style="flex:1; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); outline:none; font-size:14px; background:#0c0d0f; color:#fff;">
         <button id="imageUrlSend" style="padding:8px 10px; border-radius:8px; border:none; background:#2f855a; color:white; cursor:pointer; font-size:14px;">Send</button>
         <button id="imageUploadBtn" style="padding:8px 10px; border-radius:8px; border:none; background:#2b6cb0; color:white; cursor:pointer; font-size:14px;">Upload</button>
         <button id="imageUrlCancel" style="padding:8px 10px; border-radius:8px; border:none; background:#555; color:white; cursor:pointer; font-size:14px;">Cancel</button>
       </div>
-
       <div style="padding:12px; background:#0f1113; display:flex; gap:8px; align-items:center; border-top:1px solid rgba(255,255,255,0.02);">
         <button id="imageBtn" title="Add image" style="padding:8px 10px; border-radius:10px; border:none; background:#2b6cb0; color:white; cursor:pointer; font-size:16px;">🖼️</button>
         <input id="chatInput" style="flex:1; padding:12px; border-radius:10px; border:1px solid rgba(255,255,255,0.04); outline:none; font-size:15px; background:#0c0d0f; color:#fff;" placeholder="Type a message...">
         <button id="chatSend" style="padding:10px 14px; border-radius:10px; border:none; background:#2f855a; color:white; cursor:pointer; font-size:15px;">Send</button>
       </div>
     `;
-
     document.body.appendChild(box);
     registerEl(box);
 
@@ -1932,6 +1929,16 @@ function makeWsController() {
       chatController.pause();
     };
 
+    // Call button
+const callBtn = box.querySelector("#callBtn");
+callBtn.addEventListener("click", () => {
+  if (userListVisible) {
+    hideUserList();
+  } else {
+    showUserList();
+  }
+});
+
     closeBtn.onclick = () => {
       if (box._chatController) try { box._chatController.stop(); } catch (e) {}
       if (box._timeUpdater) { try { clearInterval(box._timeUpdater); } catch (e) {} box._timeUpdater = null; }
@@ -1972,30 +1979,434 @@ function makeWsController() {
 
     // Room switching logic (updated)
     async function switchRoom(newRoomName) {
-      if (!newRoomName || !newRoomName.trim()) { alert("Room name required"); return; }
-      const trimmed = newRoomName.trim();
-      if (trimmed === currentRoom) {
-        currentRoomDisplay.textContent = `room: ${currentRoom}`; return;
-      }
-      try { chatController.stop(); } catch (e) {}
-      if (box._timeUpdater) { try { clearInterval(box._timeUpdater); } catch (e) {} box._timeUpdater = null; }
-      msgBox.innerHTML = ""; msgBox.appendChild(newMsgBtn);
+  if (!newRoomName || !newRoomName.trim()) { alert("Room name required"); return; }
+  const trimmed = newRoomName.trim();
+  if (trimmed === currentRoom) {
+    currentRoomDisplay.textContent = `room: ${currentRoom}`; return;
+  }
+  chatController.stop();
+  if (box._timeUpdater) { clearInterval(box._timeUpdater); box._timeUpdater = null; }
+  msgBox.innerHTML = "";
+  msgBox.appendChild(newMsgBtn);
+  currentRoom = trimmed;
+  try { localStorage.setItem("dole_chat_room", currentRoom); } catch (e) {}
+  if (currentRoomDisplay) currentRoomDisplay.textContent = `room: ${currentRoom}`;
+  addRoomToList(currentRoom);
+  chatController = makeWsController();
+  box._chatController = chatController;
+  await chatController.start();
+  box._timeUpdater = setInterval(() => refreshTimestampsIn(msgBox), TIMESTAMP_REFRESH_MS);
+  refreshTimestampsIn(msgBox);
+}
 
-      currentRoom = trimmed;
-      try { localStorage.setItem("dole_chat_room", currentRoom); } catch (e) {}
-      if (currentRoomDisplay) currentRoomDisplay.textContent = `room: ${currentRoom}`;
+    // ---- WebSocket indicator ----
+function updateWsIndicator(connected) {
+  const dot = box.querySelector("#wsIndicator");
+  if (!dot) return;
+  dot.style.background = connected ? "#68d391" : "#fc8181";
+  dot.title = connected ? "Live connection" : "Reconnecting...";
+}
 
-      // ensure room added to library
-      addRoomToList(currentRoom);
+// ---- Minify helper (used by call start/accept) ----
+function minifyChat() {
+  if (minIcon) return;
+  minIcon = createMinIcon();
+  box.style.display = "none";
+  chatController.pause();
+}
 
-      // create new controller and start
-      chatController = makeChatController();
-      box._chatController = chatController;
-      chatController.pollLoop();
-      await chatController.loadMessagesOnce({ forceScroll: true }).catch(() => {});
-      box._timeUpdater = setInterval(() => refreshTimestampsIn(msgBox), TIMESTAMP_REFRESH_MS);
-      refreshTimestampsIn(msgBox);
+// ---- Resize handle helper ----
+function makeResizable(el, minW = 280, minH = 320) {
+  const handle = document.createElement("div");
+  Object.assign(handle.style, {
+    position: "absolute",
+    right: "0",
+    bottom: "0",
+    width: "28px",
+    height: "28px",
+    cursor: "se-resize",
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "flex-end",
+    padding: "6px",
+    zIndex: 10,
+    touchAction: "none",
+  });
+  handle.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+    <path d="M11 1L1 11M11 6L6 11M11 11" stroke="rgba(255,255,255,0.3)" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>`;
+  el.style.position = "fixed";
+  el.appendChild(handle);
+
+  let resizing = false, startX = 0, startY = 0, startW = 0, startH = 0;
+
+  handle.addEventListener("pointerdown", e => {
+    resizing = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    startW = el.offsetWidth;
+    startH = el.offsetHeight;
+    handle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  handle.addEventListener("pointermove", e => {
+    if (!resizing) return;
+    const newW = Math.max(minW, startW + (e.clientX - startX));
+    const newH = Math.max(minH, startH + (e.clientY - startY));
+    el.style.width = newW + "px";
+    el.style.height = newH + "px";
+    e.preventDefault();
+  });
+  handle.addEventListener("pointerup", () => resizing = false);
+}
+
+// ---- User list panel ----
+let userListVisible = false;
+
+const userListPanel = document.createElement("div");
+userListPanel.id = "userListPanel";
+Object.assign(userListPanel.style, {
+  position: "absolute",
+  left: "0",
+  right: "0",
+  top: "0",
+  background: "linear-gradient(180deg,#0d0e10,#111214)",
+  zIndex: 45,
+  display: "none",
+  flexDirection: "column",
+  borderRadius: "12px 12px 0 0",
+  overflow: "hidden",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+  border: "1px solid rgba(255,255,255,0.04)",
+  transition: "transform 0.25s ease",
+  transform: "translateY(-100%)",
+});
+
+userListPanel.innerHTML = `
+  <div style="padding:14px 16px; background:#0d0e10; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.04);">
+    <div style="font-weight:700; font-size:15px; color:#e6eefc;">📞 Call Someone</div>
+    <button id="closeUserList" style="background:#333; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:14px; min-width:44px; min-height:44px;">✕</button>
+  </div>
+  <div id="userListInner" style="padding:12px; display:flex; flex-direction:column; gap:10px; overflow-y:auto; max-height:280px; -webkit-overflow-scrolling:touch;"></div>
+  <div id="userListEmpty" style="padding:20px; text-align:center; font-size:14px; color:#9fb0e6; opacity:0.8; display:none;">No other users online in this room right now.</div>
+`;
+box.appendChild(userListPanel);
+
+function renderUserList() {
+  const inner = userListPanel.querySelector("#userListInner");
+  const empty = userListPanel.querySelector("#userListEmpty");
+  const users = chatController ? chatController.currentUsers : [];
+  inner.innerHTML = "";
+
+  if (!users || users.length === 0) {
+    inner.style.display = "none";
+    empty.style.display = "block";
+    return;
+  }
+
+  inner.style.display = "flex";
+  empty.style.display = "none";
+
+  for (const u of users) {
+    const row = document.createElement("div");
+    Object.assign(row.style, {
+      display: "flex",
+      alignItems: "center",
+      gap: "12px",
+      padding: "12px",
+      borderRadius: "10px",
+      background: "rgba(255,255,255,0.03)",
+      border: "1px solid rgba(255,255,255,0.04)",
+    });
+
+    const avatar = document.createElement("div");
+    Object.assign(avatar.style, {
+      width: "40px",
+      height: "40px",
+      borderRadius: "50%",
+      background: "#5865f2",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: "18px",
+      fontWeight: "700",
+      color: "#fff",
+      flexShrink: "0",
+    });
+    avatar.textContent = u.charAt(0).toUpperCase();
+    row.appendChild(avatar);
+
+    const name = document.createElement("div");
+    name.style.flex = "1";
+    name.style.fontWeight = "600";
+    name.style.fontSize = "15px";
+    name.style.color = "#e6eefc";
+    name.textContent = u;
+    row.appendChild(name);
+
+    const callBtn = document.createElement("button");
+    Object.assign(callBtn.style, {
+      padding: "10px 16px",
+      borderRadius: "10px",
+      border: "none",
+      background: "#2f855a",
+      color: "#fff",
+      cursor: "pointer",
+      fontSize: "20px",
+      minWidth: "50px",
+      minHeight: "50px",
+    });
+    callBtn.textContent = "📞";
+    callBtn.title = `Call ${u}`;
+    callBtn.addEventListener("click", () => {
+      hideUserList();
+      chatController.startCall(u);
+    });
+    row.appendChild(callBtn);
+
+    inner.appendChild(row);
+  }
+}
+
+function showUserList() {
+  userListVisible = true;
+  userListPanel.style.display = "flex";
+  requestAnimationFrame(() => {
+    userListPanel.style.transform = "translateY(0)";
+  });
+  renderUserList();
+}
+
+function hideUserList() {
+  userListVisible = false;
+  userListPanel.style.transform = "translateY(-100%)";
+  setTimeout(() => {
+    if (!userListVisible) userListPanel.style.display = "none";
+  }, 260);
+}
+
+userListPanel.querySelector("#closeUserList").addEventListener("click", hideUserList);
+
+// ---- Incoming call banner ----
+const incomingBanner = document.createElement("div");
+incomingBanner.id = "incomingCallBanner";
+Object.assign(incomingBanner.style, {
+  position: "absolute",
+  left: "0",
+  right: "0",
+  top: "0",
+  background: "linear-gradient(135deg, #1a472a, #2f855a)",
+  zIndex: 46,
+  display: "none",
+  flexDirection: "column",
+  alignItems: "center",
+  padding: "20px 16px",
+  gap: "14px",
+  borderRadius: "12px 12px 0 0",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+  border: "1px solid rgba(255,255,255,0.06)",
+});
+
+incomingBanner.innerHTML = `
+  <div style="font-size:32px;">📞</div>
+  <div id="incomingCallerName" style="font-size:17px; font-weight:700; color:#fff; text-align:center;"></div>
+  <div style="font-size:13px; color:rgba(255,255,255,0.7);">Incoming video call</div>
+  <div style="display:flex; gap:16px; width:100%; justify-content:center;">
+    <button id="acceptCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#68d391; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:52px;">Accept ✓</button>
+    <button id="rejectCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#fc8181; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:52px;">Reject ✕</button>
+  </div>
+`;
+box.appendChild(incomingBanner);
+
+incomingBanner.querySelector("#acceptCallBtn").addEventListener("click", () => {
+  chatController.acceptCall();
+});
+incomingBanner.querySelector("#rejectCallBtn").addEventListener("click", () => {
+  chatController.rejectCall();
+});
+
+function showIncomingCallBanner(callerName) {
+  incomingBanner.querySelector("#incomingCallerName").textContent = callerName + " is calling...";
+  incomingBanner.style.display = "flex";
+}
+
+function hideIncomingCallBanner() {
+  incomingBanner.style.display = "none";
+}
+
+// ---- Call window ----
+let callWindow = null;
+let remoteVideoEl = null;
+let localVideoEl = null;
+let callStatusEl = null;
+
+function showCallWindow(peerName, lStream, rStream) {
+  if (callWindow) { try { callWindow.remove(); } catch(e) {} }
+
+  callWindow = document.createElement("div");
+  Object.assign(callWindow.style, {
+    position: "fixed",
+    top: "20px",
+    left: "20px",
+    width: "min(92vw, 420px)",
+    height: "min(85vh, 560px)",
+    background: "#0d0e10",
+    borderRadius: "16px",
+    zIndex: 1000001,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+    boxShadow: "0 16px 48px rgba(0,0,0,0.7)",
+    border: "1px solid rgba(255,255,255,0.06)",
+    fontFamily: "Inter, Arial, sans-serif",
+    touchAction: "none",
+  });
+
+  callWindow.innerHTML = `
+    <div id="callHeader" style="padding:14px 16px; background:#080909; display:flex; align-items:center; gap:10px; cursor:grab; user-select:none; flex-shrink:0;">
+      <div style="width:10px; height:10px; border-radius:50%; background:#fc8181;" id="callDot"></div>
+      <div style="flex:1; font-weight:700; font-size:15px; color:#e6eefc;" id="callHeaderName">Calling ${escapeHtml(peerName)}...</div>
+      <div id="callStatus" style="font-size:12px; color:#9fb0e6; opacity:0.8;"></div>
+      <button id="callCloseBtn" style="background:#333; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:14px; min-width:44px; min-height:44px;">✕</button>
+    </div>
+
+    <div style="flex:1; position:relative; background:#000; overflow:hidden;">
+      <video id="remoteVideo" autoplay playsinline style="width:100%; height:100%; object-fit:cover; display:block;"></video>
+      <video id="localVideo" autoplay muted playsinline style="
+        position:absolute;
+        bottom:14px;
+        right:14px;
+        width:110px;
+        height:82px;
+        object-fit:cover;
+        border-radius:10px;
+        border:2px solid rgba(255,255,255,0.15);
+        background:#111;
+        box-shadow:0 4px 12px rgba(0,0,0,0.5);
+        z-index:2;
+      "></video>
+      <div id="callWaiting" style="
+        position:absolute;
+        inset:0;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        gap:14px;
+        color:#e6eefc;
+      ">
+        <div style="font-size:52px;">👤</div>
+        <div style="font-size:15px; opacity:0.7;">Waiting for ${escapeHtml(peerName)}...</div>
+      </div>
+    </div>
+
+    <div style="padding:16px; background:#080909; display:flex; gap:12px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
+      <button id="callMuteBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center;">🎤</button>
+      <button id="callVideoBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center;">📷</button>
+      <button id="callEndBtn" style="width:72px; height:72px; border-radius:50%; border:none; background:#e53e3e; color:#fff; font-size:26px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(229,62,62,0.4);">📵</button>
+    </div>
+  `;
+
+  document.body.appendChild(callWindow);
+
+  remoteVideoEl = callWindow.querySelector("#remoteVideo");
+  localVideoEl = callWindow.querySelector("#localVideo");
+  callStatusEl = callWindow.querySelector("#callStatus");
+  const callDot = callWindow.querySelector("#callDot");
+  const callWaiting = callWindow.querySelector("#callWaiting");
+  const callHeaderName = callWindow.querySelector("#callHeaderName");
+
+  // Set local stream immediately
+  if (lStream) localVideoEl.srcObject = lStream;
+
+  // Set remote stream if already available
+  if (rStream) {
+    remoteVideoEl.srcObject = rStream;
+    callWaiting.style.display = "none";
+  }
+
+  // Drag
+  const callHeader = callWindow.querySelector("#callHeader");
+  let drag = false, ox = 0, oy = 0;
+  callHeader.addEventListener("pointerdown", e => {
+    if (e.target.tagName === "BUTTON") return;
+    drag = true;
+    ox = e.clientX - callWindow.getBoundingClientRect().left;
+    oy = e.clientY - callWindow.getBoundingClientRect().top;
+    callHeader.setPointerCapture(e.pointerId);
+  });
+  callHeader.addEventListener("pointermove", e => {
+    if (!drag) return;
+    callWindow.style.left = Math.max(0, Math.min(window.innerWidth - callWindow.offsetWidth, e.clientX - ox)) + "px";
+    callWindow.style.top = Math.max(0, Math.min(window.innerHeight - callWindow.offsetHeight, e.clientY - oy)) + "px";
+    e.preventDefault();
+  });
+  callHeader.addEventListener("pointerup", () => drag = false);
+
+  // Resize
+  makeResizable(callWindow, 300, 360);
+
+  // Controls
+  let muted = false, vidHidden = false;
+  const muteBtn = callWindow.querySelector("#callMuteBtn");
+  const videoBtn = callWindow.querySelector("#callVideoBtn");
+  const endBtn = callWindow.querySelector("#callEndBtn");
+  const closeBtn = callWindow.querySelector("#callCloseBtn");
+
+  muteBtn.addEventListener("click", () => {
+    muted = !muted;
+    if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = !muted);
+    muteBtn.textContent = muted ? "🔇" : "🎤";
+    muteBtn.style.background = muted ? "#e53e3e" : "#2d3748";
+  });
+
+  videoBtn.addEventListener("click", () => {
+    vidHidden = !vidHidden;
+    if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = !vidHidden);
+    videoBtn.textContent = vidHidden ? "🚫" : "📷";
+    videoBtn.style.background = vidHidden ? "#e53e3e" : "#2d3748";
+  });
+
+  endBtn.addEventListener("click", () => chatController.endCall());
+  closeBtn.addEventListener("click", () => chatController.endCall());
+
+  // Update dot and waiting screen when connected
+  const origUpdateCallStatus = updateCallStatus;
+  window.__callStatusUpdater = (msg) => {
+    if (callStatusEl) callStatusEl.textContent = msg;
+    if (msg.includes("🟢")) {
+      callDot.style.background = "#68d391";
+      callHeaderName.textContent = peerName;
+      callWaiting.style.display = "none";
     }
+  };
+}
+
+function hideCallWindow() {
+  if (callWindow) {
+    try { callWindow.remove(); } catch (e) {}
+    callWindow = null;
+    remoteVideoEl = null;
+    localVideoEl = null;
+    callStatusEl = null;
+    window.__callStatusUpdater = null;
+  }
+}
+
+function setRemoteStream(stream) {
+  if (remoteVideoEl) {
+    remoteVideoEl.srcObject = stream;
+    const waiting = callWindow && callWindow.querySelector("#callWaiting");
+    if (waiting) waiting.style.display = "none";
+  }
+}
+
+function updateCallStatus(msg) {
+  if (window.__callStatusUpdater) window.__callStatusUpdater(msg);
+}
+
+// Make chat box resizable too
+makeResizable(box, 300, 400);
 
     // Wire up send
     box.querySelector("#chatSend").onclick = async () => {
