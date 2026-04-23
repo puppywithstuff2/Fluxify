@@ -603,10 +603,10 @@
       border: "1px solid rgba(255,255,255,0.03)"
     });
 
-   box.innerHTML = `
-      <div id="chatHeader" style="padding:12px; background:linear-gradient(180deg,#111214,#17181b); font-weight:600; text-align:center; position:relative; font-size:15px; display:flex; align-items:center; justify-content:center; gap:10px; flex-shrink:0;">
+    box.innerHTML = `
+      <div id="chatHeader" style="padding:12px; background:linear-gradient(180deg,#111214,#17181b); font-weight:600; text-align:center; position:relative; font-size:15px; display:flex; align-items:center; justify-content:center;">
         <div style="display:flex; gap:8px; align-items:center; position:absolute; left:12px;">
-          <button id="minifyChat" title="Minify" style="background:transparent; border:none; color:#bfc7ff; padding:8px; border-radius:8px; cursor:pointer; font-size:18px; min-width:44px; min-height:44px;">_</button>
+          <button id="minifyChat" title="Minify" style="background:transparent; border:none; color:#bfc7ff; padding:8px; border-radius:8px; cursor:pointer; font-size:18px; min-width:44px; min-height:44px;">−</button>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
           <div style="font-weight:700; color:#e6eefc;">Friends Chat</div>
@@ -623,8 +623,8 @@
         <button id="openExploreBtn" style="padding:8px 12px; border-radius:10px; border:none; background:#2b6cb0; color:white; cursor:pointer; font-size:13px;">Explore</button>
         <div id="currentRoomDisplay" style="font-size:13px; opacity:0.9; color:#ddd; margin-left:auto;">room: ${currentRoom}</div>
       </div>
-      <div id="chatMessages" style="flex:1; padding:12px; overflow-y:auto; background:linear-gradient(180deg,#0f1113,#141518); display:flex; flex-direction: column; gap:8px; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; touch-action:auto; position:relative;"></div>
-      <div id="imageInputRow" style="display:none; padding:8px 10px; background:#0f1113; gap:8px; align-items:center;">
+      <div id="chatMessages" style="flex:1; padding:12px; overflow-y:auto; background:linear-gradient(180deg,#0f1113,#141518); display:flex; flex-direction:column; gap:8px; -webkit-overflow-scrolling:touch; position:relative;"></div>
+      <div id="imageInputRow" style="display:none; padding:8px 10px; background:#0f1113; gap:8px; align-items:center; flex-direction:row;">
         <input id="imageUrlInput" placeholder="Paste image URL (png/jpg/gif/webp...)" style="flex:1; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); outline:none; font-size:14px; background:#0c0d0f; color:#fff;">
         <button id="imageUrlSend" style="padding:8px 10px; border-radius:8px; border:none; background:#2f855a; color:white; cursor:pointer; font-size:14px;">Send</button>
         <button id="imageUploadBtn" style="padding:8px 10px; border-radius:8px; border:none; background:#2b6cb0; color:white; cursor:pointer; font-size:14px;">Upload</button>
@@ -964,371 +964,371 @@
     }
 
     async function showExploreOverlay() {
-  try {
-    const existing = box.querySelector("#explorePanel");
-    if (existing) existing.remove();
+      try {
+        const existing = box.querySelector("#explorePanel");
+        if (existing) existing.remove();
 
-    const ex = document.createElement("div");
-    ex.id = "explorePanel";
-    Object.assign(ex.style, {
-      position: "absolute",
-      left: "0",
-      top: "0",
-      right: "0",
-      bottom: "0",
-      zIndex: 50,
-      display: "flex",
-      flexDirection: "column",
-      background: "#111214",
-      borderRadius: "12px",
-      overflow: "hidden",
-    });
-
-    // --- Header ---
-    const header = document.createElement("div");
-    Object.assign(header.style, {
-      padding: "12px 14px",
-      background: "#0d0e10",
-      borderBottom: "1px solid rgba(255,255,255,0.05)",
-      display: "flex",
-      alignItems: "center",
-      gap: "10px",
-      flexShrink: "0",
-    });
-    header.innerHTML = `
-      <div style="font-size:15px; font-weight:700; color:#e6eefc; flex:1;">Explore Rooms</div>
-      <button id="exploreClose" style="background:#333; border:none; padding:7px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:13px;">Close</button>
-    `;
-    ex.appendChild(header);
-
-    // --- Search bar ---
-    const searchRow = document.createElement("div");
-    Object.assign(searchRow.style, {
-      padding: "10px 14px 6px",
-      flexShrink: "0",
-      background: "#111214",
-    });
-    searchRow.innerHTML = `
-      <input id="exploreSearch" placeholder="Search rooms..." style="
-        width:100%;
-        box-sizing:border-box;
-        padding:10px 12px;
-        border-radius:10px;
-        border:1px solid rgba(255,255,255,0.06);
-        background:#0c0d0f;
-        color:#fff;
-        font-size:14px;
-        outline:none;
-      ">
-    `;
-    ex.appendChild(searchRow);
-
-    // --- Filter pills ---
-    const pillsRow = document.createElement("div");
-    Object.assign(pillsRow.style, {
-      padding: "6px 14px 10px",
-      display: "flex",
-      gap: "8px",
-      flexShrink: "0",
-      background: "#111214",
-      borderBottom: "1px solid rgba(255,255,255,0.04)",
-    });
-
-    function makePill(label, id) {
-      const pill = document.createElement("button");
-      pill.id = id;
-      pill.textContent = label;
-      Object.assign(pill.style, {
-        padding: "6px 14px",
-        borderRadius: "999px",
-        border: "1px solid rgba(255,255,255,0.08)",
-        background: "transparent",
-        color: "#9fb0e6",
-        cursor: "pointer",
-        fontSize: "13px",
-        fontWeight: "600",
-        transition: "all 0.15s",
-      });
-      return pill;
-    }
-
-    const recentPill = makePill("🕐 Recent", "pillRecent");
-    const activePill = makePill("🔥 Most Active", "pillActive");
-    pillsRow.appendChild(recentPill);
-    pillsRow.appendChild(activePill);
-    ex.appendChild(pillsRow);
-
-    // --- List ---
-    const listEl = document.createElement("div");
-    Object.assign(listEl.style, {
-      flex: "1",
-      overflowY: "auto",
-      padding: "10px 14px",
-      display: "flex",
-      flexDirection: "column",
-      gap: "8px",
-      WebkitOverflowScrolling: "touch",
-    });
-    ex.appendChild(listEl);
-
-    box.appendChild(ex);
-
-    // --- State ---
-    const searchInput = ex.querySelector("#exploreSearch");
-    const closeBtn = ex.querySelector("#exploreClose");
-
-    let filterRecent = false;
-    let filterActive = false;
-    let allRooms = [];
-    let isLoading = false;
-
-    function setPillActive(pill, active) {
-      if (active) {
-        pill.style.background = "#5865f2";
-        pill.style.color = "#fff";
-        pill.style.borderColor = "#5865f2";
-      } else {
-        pill.style.background = "transparent";
-        pill.style.color = "#9fb0e6";
-        pill.style.borderColor = "rgba(255,255,255,0.08)";
-      }
-    }
-
-    // --- Scoring & sorting ---
-    function getSortedRooms(rooms, query) {
-      let list = rooms.slice();
-
-      // search filter
-      if (query && query.trim()) {
-        const q = query.trim().toLowerCase();
-        list = list.filter(r => String(r.room || "").toLowerCase().includes(q));
-      }
-
-      if (!filterRecent && !filterActive) {
-        // default: just by last_activity
-        return list.sort((a, b) => (Number(b.last_activity) || 0) - (Number(a.last_activity) || 0));
-      }
-
-      if (filterRecent && !filterActive) {
-        return list.sort((a, b) => (Number(b.last_activity) || 0) - (Number(a.last_activity) || 0));
-      }
-
-      if (filterActive && !filterRecent) {
-        return list.sort((a, b) => (Number(b.message_count) || 0) - (Number(a.message_count) || 0));
-      }
-
-      // Both active — combined normalised score
-      const maxActivity = Math.max(...list.map(r => Number(r.last_activity) || 0), 1);
-      const minActivity = Math.min(...list.map(r => Number(r.last_activity) || 0), 0);
-      const maxCount = Math.max(...list.map(r => Number(r.message_count) || 0), 1);
-
-      const activityRange = maxActivity - minActivity || 1;
-
-      return list.sort((a, b) => {
-        const scoreA =
-          0.5 * ((Number(a.last_activity) || 0) - minActivity) / activityRange +
-          0.5 * (Number(a.message_count) || 0) / maxCount;
-        const scoreB =
-          0.5 * ((Number(b.last_activity) || 0) - minActivity) / activityRange +
-          0.5 * (Number(b.message_count) || 0) / maxCount;
-        return scoreB - scoreA;
-      });
-    }
-
-    // --- Render ---
-    function renderList() {
-      const query = searchInput.value || "";
-      const sorted = getSortedRooms(allRooms, query);
-      listEl.innerHTML = "";
-
-      if (!sorted.length) {
-        const empty = document.createElement("div");
-        Object.assign(empty.style, { opacity: "0.6", fontSize: "14px", padding: "16px 0", textAlign: "center", color: "#9fb0e6" });
-        empty.textContent = allRooms.length ? "No rooms match your search." : "No rooms found.";
-        listEl.appendChild(empty);
-        return;
-      }
-
-      for (const r of sorted) {
-        const card = document.createElement("div");
-        Object.assign(card.style, {
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          padding: "12px",
-          borderRadius: "10px",
-          background: "linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
-          border: "1px solid rgba(255,255,255,0.04)",
-          cursor: "default",
-        });
-
-        // Icon
-        const icon = document.createElement("div");
-        Object.assign(icon.style, {
-          width: "40px",
-          height: "40px",
-          borderRadius: "12px",
-          background: "#1e2030",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "18px",
-          flexShrink: "0",
-          border: "1px solid rgba(255,255,255,0.04)",
-        });
-        icon.textContent = "💬";
-        card.appendChild(icon);
-
-        // Info
-        const info = document.createElement("div");
-        Object.assign(info.style, {
-          flex: "1",
-          minWidth: "0",
+        const ex = document.createElement("div");
+        ex.id = "explorePanel";
+        Object.assign(ex.style, {
+          position: "absolute",
+          left: "0",
+          top: "0",
+          right: "0",
+          bottom: "0",
+          zIndex: 50,
           display: "flex",
           flexDirection: "column",
-          gap: "3px",
-        });
-
-        const nameEl = document.createElement("div");
-        Object.assign(nameEl.style, {
-          fontWeight: "700",
-          fontSize: "14px",
-          color: "#e6eefc",
+          background: "#111214",
+          borderRadius: "12px",
           overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
         });
-        nameEl.textContent = r.room;
-        info.appendChild(nameEl);
 
-        const statsEl = document.createElement("div");
-        Object.assign(statsEl.style, {
-          fontSize: "12px",
-          color: "#7289da",
+        // --- Header ---
+        const header = document.createElement("div");
+        Object.assign(header.style, {
+          padding: "12px 14px",
+          background: "#0d0e10",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          flexShrink: "0",
+        });
+        header.innerHTML = `
+          <div style="font-size:15px; font-weight:700; color:#e6eefc; flex:1;">Explore Rooms</div>
+          <button id="exploreClose" style="background:#333; border:none; padding:7px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:13px;">Close</button>
+        `;
+        ex.appendChild(header);
+
+        // --- Search bar ---
+        const searchRow = document.createElement("div");
+        Object.assign(searchRow.style, {
+          padding: "10px 14px 6px",
+          flexShrink: "0",
+          background: "#111214",
+        });
+        searchRow.innerHTML = `
+          <input id="exploreSearch" placeholder="Search rooms..." style="
+            width:100%;
+            box-sizing:border-box;
+            padding:10px 12px;
+            border-radius:10px;
+            border:1px solid rgba(255,255,255,0.06);
+            background:#0c0d0f;
+            color:#fff;
+            font-size:14px;
+            outline:none;
+          ">
+        `;
+        ex.appendChild(searchRow);
+
+        // --- Filter pills ---
+        const pillsRow = document.createElement("div");
+        Object.assign(pillsRow.style, {
+          padding: "6px 14px 10px",
           display: "flex",
           gap: "8px",
-          alignItems: "center",
+          flexShrink: "0",
+          background: "#111214",
+          borderBottom: "1px solid rgba(255,255,255,0.04)",
         });
 
-        const msgCount = document.createElement("span");
-        msgCount.textContent = `💬 ${Number(r.message_count) || 0}`;
-        statsEl.appendChild(msgCount);
-
-        const dot = document.createElement("span");
-        dot.textContent = "·";
-        dot.style.opacity = "0.4";
-        statsEl.appendChild(dot);
-
-        const lastActive = document.createElement("span");
-        lastActive.textContent = r.last_activity ? `🕐 ${timeAgoShort(new Date(Number(r.last_activity)))}` : "No activity";
-        statsEl.appendChild(lastActive);
-
-        info.appendChild(statsEl);
-
-        // Claimed badge
-        const claimedInfo = claimedChatsMap[r.room];
-        if (claimedInfo && claimedInfo.claimed_by) {
-          const badge = document.createElement("div");
-          Object.assign(badge.style, {
-            fontSize: "11px",
-            color: "#a0aec0",
-            background: "rgba(255,255,255,0.04)",
-            padding: "2px 8px",
+        function makePill(label, id) {
+          const pill = document.createElement("button");
+          pill.id = id;
+          pill.textContent = label;
+          Object.assign(pill.style, {
+            padding: "6px 14px",
             borderRadius: "999px",
-            marginTop: "2px",
-            display: "inline-block",
-            width: "fit-content",
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "transparent",
+            color: "#9fb0e6",
+            cursor: "pointer",
+            fontSize: "13px",
+            fontWeight: "600",
+            transition: "all 0.15s",
           });
-          badge.textContent = `🔒 ${claimedInfo.claimed_by}`;
-          info.appendChild(badge);
-        } else {
-          const badge = document.createElement("div");
-          Object.assign(badge.style, {
-            fontSize: "11px",
-            color: "#68d391",
-            background: "rgba(104,211,145,0.08)",
-            padding: "2px 8px",
-            borderRadius: "999px",
-            marginTop: "2px",
-            display: "inline-block",
-            width: "fit-content",
-          });
-          badge.textContent = "✓ Open";
-          info.appendChild(badge);
+          return pill;
         }
 
-        card.appendChild(info);
+        const recentPill = makePill("🕐 Recent", "pillRecent");
+        const activePill = makePill("🔥 Most Active", "pillActive");
+        pillsRow.appendChild(recentPill);
+        pillsRow.appendChild(activePill);
+        ex.appendChild(pillsRow);
 
-        // Join button
-        const joinBtn = document.createElement("button");
-        joinBtn.textContent = "Join";
-        Object.assign(joinBtn.style, {
-          padding: "8px 14px",
-          borderRadius: "8px",
-          border: "none",
-          background: "#5865f2",
-          color: "#fff",
-          cursor: "pointer",
-          fontSize: "13px",
-          fontWeight: "600",
-          flexShrink: "0",
-          whiteSpace: "nowrap",
+        // --- List ---
+        const listEl = document.createElement("div");
+        Object.assign(listEl.style, {
+          flex: "1",
+          overflowY: "auto",
+          padding: "10px 14px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "8px",
+          WebkitOverflowScrolling: "touch",
         });
-        joinBtn.addEventListener("click", async () => {
-          addRoomToList(r.room);
-          ex.remove();
-          await switchRoom(r.room);
-        });
-        card.appendChild(joinBtn);
+        ex.appendChild(listEl);
 
-        listEl.appendChild(card);
+        box.appendChild(ex);
+
+        // --- State ---
+        const searchInput = ex.querySelector("#exploreSearch");
+        const closeBtn = ex.querySelector("#exploreClose");
+
+        let filterRecent = false;
+        let filterActive = false;
+        let allRooms = [];
+        let isLoading = false;
+
+        function setPillActive(pill, active) {
+          if (active) {
+            pill.style.background = "#5865f2";
+            pill.style.color = "#fff";
+            pill.style.borderColor = "#5865f2";
+          } else {
+            pill.style.background = "transparent";
+            pill.style.color = "#9fb0e6";
+            pill.style.borderColor = "rgba(255,255,255,0.08)";
+          }
+        }
+
+        // --- Scoring & sorting ---
+        function getSortedRooms(rooms, query) {
+          let list = rooms.slice();
+
+          // search filter
+          if (query && query.trim()) {
+            const q = query.trim().toLowerCase();
+            list = list.filter(r => String(r.room || "").toLowerCase().includes(q));
+          }
+
+          if (!filterRecent && !filterActive) {
+            // default: just by last_activity
+            return list.sort((a, b) => (Number(b.last_activity) || 0) - (Number(a.last_activity) || 0));
+          }
+
+          if (filterRecent && !filterActive) {
+            return list.sort((a, b) => (Number(b.last_activity) || 0) - (Number(a.last_activity) || 0));
+          }
+
+          if (filterActive && !filterRecent) {
+            return list.sort((a, b) => (Number(b.message_count) || 0) - (Number(a.message_count) || 0));
+          }
+
+          // Both active — combined normalised score
+          const maxActivity = Math.max(...list.map(r => Number(r.last_activity) || 0), 1);
+          const minActivity = Math.min(...list.map(r => Number(r.last_activity) || 0), 0);
+          const maxCount = Math.max(...list.map(r => Number(r.message_count) || 0), 1);
+
+          const activityRange = maxActivity - minActivity || 1;
+
+          return list.sort((a, b) => {
+            const scoreA =
+              0.5 * ((Number(a.last_activity) || 0) - minActivity) / activityRange +
+              0.5 * (Number(a.message_count) || 0) / maxCount;
+            const scoreB =
+              0.5 * ((Number(b.last_activity) || 0) - minActivity) / activityRange +
+              0.5 * (Number(b.message_count) || 0) / maxCount;
+            return scoreB - scoreA;
+          });
+        }
+
+        // --- Render ---
+        function renderList() {
+          const query = searchInput.value || "";
+          const sorted = getSortedRooms(allRooms, query);
+          listEl.innerHTML = "";
+
+          if (!sorted.length) {
+            const empty = document.createElement("div");
+            Object.assign(empty.style, { opacity: "0.6", fontSize: "14px", padding: "16px 0", textAlign: "center", color: "#9fb0e6" });
+            empty.textContent = allRooms.length ? "No rooms match your search." : "No rooms found.";
+            listEl.appendChild(empty);
+            return;
+          }
+
+          for (const r of sorted) {
+            const card = document.createElement("div");
+            Object.assign(card.style, {
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              padding: "12px",
+              borderRadius: "10px",
+              background: "linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
+              border: "1px solid rgba(255,255,255,0.04)",
+              cursor: "default",
+            });
+
+            // Icon
+            const icon = document.createElement("div");
+            Object.assign(icon.style, {
+              width: "40px",
+              height: "40px",
+              borderRadius: "12px",
+              background: "#1e2030",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "18px",
+              flexShrink: "0",
+              border: "1px solid rgba(255,255,255,0.04)",
+            });
+            icon.textContent = "💬";
+            card.appendChild(icon);
+
+            // Info
+            const info = document.createElement("div");
+            Object.assign(info.style, {
+              flex: "1",
+              minWidth: "0",
+              display: "flex",
+              flexDirection: "column",
+              gap: "3px",
+            });
+
+            const nameEl = document.createElement("div");
+            Object.assign(nameEl.style, {
+              fontWeight: "700",
+              fontSize: "14px",
+              color: "#e6eefc",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            });
+            nameEl.textContent = r.room;
+            info.appendChild(nameEl);
+
+            const statsEl = document.createElement("div");
+            Object.assign(statsEl.style, {
+              fontSize: "12px",
+              color: "#7289da",
+              display: "flex",
+              gap: "8px",
+              alignItems: "center",
+            });
+
+            const msgCount = document.createElement("span");
+            msgCount.textContent = `💬 ${Number(r.message_count) || 0}`;
+            statsEl.appendChild(msgCount);
+
+            const dot = document.createElement("span");
+            dot.textContent = "·";
+            dot.style.opacity = "0.4";
+            statsEl.appendChild(dot);
+
+            const lastActive = document.createElement("span");
+            lastActive.textContent = r.last_activity ? `🕐 ${timeAgoShort(new Date(Number(r.last_activity)))}` : "No activity";
+            statsEl.appendChild(lastActive);
+
+            info.appendChild(statsEl);
+
+            // Claimed badge
+            const claimedInfo = claimedChatsMap[r.room];
+            if (claimedInfo && claimedInfo.claimed_by) {
+              const badge = document.createElement("div");
+              Object.assign(badge.style, {
+                fontSize: "11px",
+                color: "#a0aec0",
+                background: "rgba(255,255,255,0.04)",
+                padding: "2px 8px",
+                borderRadius: "999px",
+                marginTop: "2px",
+                display: "inline-block",
+                width: "fit-content",
+              });
+              badge.textContent = `🔒 ${claimedInfo.claimed_by}`;
+              info.appendChild(badge);
+            } else {
+              const badge = document.createElement("div");
+              Object.assign(badge.style, {
+                fontSize: "11px",
+                color: "#68d391",
+                background: "rgba(104,211,145,0.08)",
+                padding: "2px 8px",
+                borderRadius: "999px",
+                marginTop: "2px",
+                display: "inline-block",
+                width: "fit-content",
+              });
+              badge.textContent = "✓ Open";
+              info.appendChild(badge);
+            }
+
+            card.appendChild(info);
+
+            // Join button
+            const joinBtn = document.createElement("button");
+            joinBtn.textContent = "Join";
+            Object.assign(joinBtn.style, {
+              padding: "8px 14px",
+              borderRadius: "8px",
+              border: "none",
+              background: "#5865f2",
+              color: "#fff",
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: "600",
+              flexShrink: "0",
+              whiteSpace: "nowrap",
+            });
+            joinBtn.addEventListener("click", async () => {
+              addRoomToList(r.room);
+              ex.remove();
+              await switchRoom(r.room);
+            });
+            card.appendChild(joinBtn);
+
+            listEl.appendChild(card);
+          }
+        }
+
+        // --- Load ---
+        async function loadRooms() {
+          if (isLoading) return;
+          isLoading = true;
+          listEl.innerHTML = `<div style="opacity:0.6; font-size:14px; padding:16px 0; text-align:center; color:#9fb0e6;">Loading...</div>`;
+          try {
+            // fetch enough for both sort modes to work well together
+            allRooms = await fetchExplore(100, "last_activity");
+          } catch (e) {
+            allRooms = [];
+          }
+          isLoading = false;
+          renderList();
+        }
+
+        // --- Wire up ---
+        closeBtn.addEventListener("click", () => ex.remove());
+
+        recentPill.addEventListener("click", () => {
+          filterRecent = !filterRecent;
+          setPillActive(recentPill, filterRecent);
+          renderList();
+        });
+
+        activePill.addEventListener("click", () => {
+          filterActive = !filterActive;
+          setPillActive(activePill, filterActive);
+          renderList();
+        });
+
+        let searchDebounce = null;
+        searchInput.addEventListener("input", () => {
+          clearTimeout(searchDebounce);
+          searchDebounce = setTimeout(() => renderList(), 250);
+        });
+
+        // initial load
+        await loadRooms();
+
+      } catch (err) {
+        console.error("showExploreOverlay error:", err);
+        alert("Could not open Explore (see console for details).");
       }
     }
-
-    // --- Load ---
-    async function loadRooms() {
-      if (isLoading) return;
-      isLoading = true;
-      listEl.innerHTML = `<div style="opacity:0.6; font-size:14px; padding:16px 0; text-align:center; color:#9fb0e6;">Loading...</div>`;
-      try {
-        // fetch enough for both sort modes to work well together
-        allRooms = await fetchExplore(100, "last_activity");
-      } catch (e) {
-        allRooms = [];
-      }
-      isLoading = false;
-      renderList();
-    }
-
-    // --- Wire up ---
-    closeBtn.addEventListener("click", () => ex.remove());
-
-    recentPill.addEventListener("click", () => {
-      filterRecent = !filterRecent;
-      setPillActive(recentPill, filterRecent);
-      renderList();
-    });
-
-    activePill.addEventListener("click", () => {
-      filterActive = !filterActive;
-      setPillActive(activePill, filterActive);
-      renderList();
-    });
-
-    let searchDebounce = null;
-    searchInput.addEventListener("input", () => {
-      clearTimeout(searchDebounce);
-      searchDebounce = setTimeout(() => renderList(), 250);
-    });
-
-    // initial load
-    await loadRooms();
-
-  } catch (err) {
-    console.error("showExploreOverlay error:", err);
-    alert("Could not open Explore (see console for details).");
-  }
-}
     // Wire Explore button defensively
     if (openExploreBtn) {
       openExploreBtn.addEventListener("click", () => {
@@ -1345,416 +1345,415 @@
     }
 
     // ---- WebSocket + Chat Controller ----
-function makeWsController() {
-  const SLOW_POLL_MS = 30000;
-  const WS_RECONNECT_BASE = 2000;
-  const WS_RECONNECT_MAX = 30000;
+    function makeWsController() {
+      const SLOW_POLL_MS = 30000;
+      const WS_RECONNECT_BASE = 2000;
+      const WS_RECONNECT_MAX = 30000;
 
-  let ws = null;
-  let wsReconnectTimer = null;
-  let wsReconnectDelay = WS_RECONNECT_BASE;
-  let wsActive = true;
-  let wsPaused = false;
+      let ws = null;
+      let wsReconnectTimer = null;
+      let wsReconnectDelay = WS_RECONNECT_BASE;
+      let wsActive = true;
+      let wsPaused = false;
 
-  let pollTimer = null;
-  let lastCount = 0;
-  let lastMessages = [];
+      let pollTimer = null;
+      let lastCount = 0;
+      let lastMessages = [];
 
-  // Presence
-  let currentUsers = [];
+      // Presence
+      let currentUsers = [];
 
-  // Call state
-  let callState = null; // null | "outgoing" | "incoming" | "active"
-  let callPeer = null;  // username of other party
-  let peerConnection = null;
-  let localStream = null;
-  let pendingOffer = null; // stored offer SDP while waiting for user to accept
+      // Call state
+      let callState = null; // null | "outgoing" | "incoming" | "active"
+      let callPeer = null;  // username of other party
+      let peerConnection = null;
+      let localStream = null;
+      let pendingOffer = null; // stored offer SDP while waiting for user to accept
 
-  const ICE_SERVERS = [
-    { urls: "stun:stun.relay.metered.ca:80" },
-    {
-      urls: "turn:global.relay.metered.ca:80",
-      username: "951956895909a9291fb1adb3",
-      credential: "EGUb/agb91aFy24M"
-    },
-    {
-      urls: "turn:global.relay.metered.ca:80?transport=tcp",
-      username: "951956895909a9291fb1adb3",
-      credential: "EGUb/agb91aFy24M"
-    },
-    {
-      urls: "turn:global.relay.metered.ca:443",
-      username: "951956895909a9291fb1adb3",
-      credential: "EGUb/agb91aFy24M"
-    },
-    {
-      urls: "turns:global.relay.metered.ca:443?transport=tcp",
-      username: "951956895909a9291fb1adb3",
-      credential: "EGUb/agb91aFy24M"
-    }
-  ];
+      const ICE_SERVERS = [
+        { urls: "stun:stun.relay.metered.ca:80" },
+        {
+          urls: "turn:global.relay.metered.ca:80",
+          username: "951956895909a9291fb1adb3",
+          credential: "EGUb/agb91aFy24M"
+        },
+        {
+          urls: "turn:global.relay.metered.ca:80?transport=tcp",
+          username: "951956895909a9291fb1adb3",
+          credential: "EGUb/agb91aFy24M"
+        },
+        {
+          urls: "turn:global.relay.metered.ca:443",
+          username: "951956895909a9291fb1adb3",
+          credential: "EGUb/agb91aFy24M"
+        },
+        {
+          urls: "turns:global.relay.metered.ca:443?transport=tcp",
+          username: "951956895909a9291fb1adb3",
+          credential: "EGUb/agb91aFy24M"
+        }
+      ];
 
-  // ---- WebSocket ----
-  async function connectWs() {
-    if (!wsActive || wsPaused) return;
-    try {
-      const proof = await fetchRoomProof(token, currentRoom);
-      if (!proof) {
-        scheduleReconnect();
-        return;
-      }
-      const wsUrl = `${CHAT_BASE.replace("https://", "wss://").replace("http://", "ws://")}/room/${encodeURIComponent(currentRoom)}?proof=${encodeURIComponent(proof)}`;
-      ws = new WebSocket(wsUrl);
-
-      ws.addEventListener("open", () => {
-        wsReconnectDelay = WS_RECONNECT_BASE;
-        updateWsIndicator(true);
-      });
-
-      ws.addEventListener("message", (evt) => {
+      // ---- WebSocket ----
+      async function connectWs() {
+        if (!wsActive || wsPaused) return;
         try {
-          const msg = JSON.parse(evt.data);
-          if (msg.type === "chat") handleIncomingChatMessage(msg);
-          else if (msg.type === "presence") handlePresence(msg.users || []);
-          else if (msg.type && msg.type.startsWith("call-")) handleCallSignal(msg);
-        } catch (e) {}
-      });
+          const proof = await fetchRoomProof(token, currentRoom);
+          if (!proof) {
+            scheduleReconnect();
+            return;
+          }
+          const wsUrl = `${CHAT_BASE.replace("https://", "wss://").replace("http://", "ws://")}/room/${encodeURIComponent(currentRoom)}?proof=${encodeURIComponent(proof)}`;
+          ws = new WebSocket(wsUrl);
 
-      ws.addEventListener("close", () => {
-        updateWsIndicator(false);
-        if (wsActive && !wsPaused) scheduleReconnect();
-      });
+          ws.addEventListener("open", () => {
+            wsReconnectDelay = WS_RECONNECT_BASE;
+            updateWsIndicator(true);
+          });
 
-      ws.addEventListener("error", () => {
-        updateWsIndicator(false);
-        try { ws.close(); } catch (e) {}
-        if (wsActive && !wsPaused) scheduleReconnect();
-      });
+          ws.addEventListener("message", (evt) => {
+            try {
+              const msg = JSON.parse(evt.data);
+              if (msg.type === "chat") handleIncomingChatMessage(msg);
+              else if (msg.type === "presence") handlePresence(msg.users || []);
+              else if (msg.type && msg.type.startsWith("call-")) handleCallSignal(msg);
+            } catch (e) {}
+          });
 
-    } catch (e) {
-      if (wsActive && !wsPaused) scheduleReconnect();
-    }
-  }
+          ws.addEventListener("close", () => {
+            updateWsIndicator(false);
+            if (wsActive && !wsPaused) scheduleReconnect();
+          });
 
-  function scheduleReconnect() {
-    if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
-    wsReconnectTimer = setTimeout(() => {
-      wsReconnectDelay = Math.min(wsReconnectDelay * 1.5, WS_RECONNECT_MAX);
-      connectWs();
-    }, wsReconnectDelay);
-  }
+          ws.addEventListener("error", () => {
+            updateWsIndicator(false);
+            try { ws.close(); } catch (e) {}
+            if (wsActive && !wsPaused) scheduleReconnect();
+          });
 
-  function sendWs(data) {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(data));
-      return true;
-    }
-    return false;
-  }
+        } catch (e) {
+          if (wsActive && !wsPaused) scheduleReconnect();
+        }
+      }
 
-  function closeWs() {
-    if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
-    if (ws) { try { ws.close(); } catch (e) {} ws = null; }
-  }
+      function scheduleReconnect() {
+        if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
+        wsReconnectTimer = setTimeout(() => {
+          wsReconnectDelay = Math.min(wsReconnectDelay * 1.5, WS_RECONNECT_MAX);
+          connectWs();
+        }, wsReconnectDelay);
+      }
 
-  // ---- Presence ----
-  function handlePresence(users) {
-    currentUsers = users.filter(u => u !== username);
-    renderUserList();
-  }
+      function sendWs(data) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(data));
+          return true;
+        }
+        return false;
+      }
 
-  // ---- Incoming chat via WebSocket ----
-  function handleIncomingChatMessage(msg) {
-    const wasAtBottom = ctrl.isUserAtBottom();
-    appendMessageToContainer(msgBox, msg, lastMessages.length);
-    lastMessages.push(msg);
-    lastCount = lastMessages.length;
-    if (wasAtBottom) {
-      msgBox.scrollTop = msgBox.scrollHeight;
-      newMsgBtn.style.display = "none";
-    } else {
-      newMsgBtn.style.display = "block";
-    }
-    refreshTimestampsIn(msgBox);
-  }
+      function closeWs() {
+        if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
+        if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+      }
 
-  // ---- Slow poll fallback ----
-  async function slowPoll() {
-    if (!wsActive || wsPaused) return;
-    try {
-      const data = await ctrl.getMessages();
-      if (!data || !Array.isArray(data.messages)) return;
-      const newMessages = data.messages;
-      if (newMessages.length !== lastCount) {
+      // ---- Presence ----
+      function handlePresence(users) {
+        currentUsers = users.filter(u => u !== username);
+        renderUserList();
+      }
+
+      // ---- Incoming chat via WebSocket ----
+      function handleIncomingChatMessage(msg) {
         const wasAtBottom = ctrl.isUserAtBottom();
-        msgBox.innerHTML = "";
-        msgBox.appendChild(newMsgBtn);
-        newMessages.forEach((m, i) => appendMessageToContainer(msgBox, m, i));
-        lastCount = newMessages.length;
-        lastMessages = newMessages;
-        if (wasAtBottom) msgBox.scrollTop = msgBox.scrollHeight;
-      }
-    } catch (e) {}
-    if (wsActive) pollTimer = setTimeout(slowPoll, SLOW_POLL_MS);
-  }
-
-  // ---- Call signaling ----
-  function handleCallSignal(msg) {
-    switch (msg.type) {
-      case "call-offer":
-        if (callState) return; // already in a call
-        handleIncomingOffer(msg);
-        break;
-      case "call-answer":
-        if (callState === "outgoing" && peerConnection) {
-          peerConnection.setRemoteDescription(
-            new RTCSessionDescription({ type: "answer", sdp: msg.sdp })
-          ).catch(e => console.error("setRemoteDescription error", e));
-        }
-        break;
-      case "call-ice":
-        if (peerConnection && msg.candidate) {
-          peerConnection.addIceCandidate(
-            new RTCIceCandidate(msg.candidate)
-          ).catch(e => console.error("addIceCandidate error", e));
-        }
-        break;
-      case "call-end":
-      case "call-reject":
-        endCall(msg.type === "call-reject" ? "rejected" : "ended");
-        break;
-    }
-  }
-
-  // ---- Incoming offer ----
-  function handleIncomingOffer(msg) {
-    callState = "incoming";
-    callPeer = msg._from;
-    pendingOffer = msg.sdp;
-    showIncomingCallBanner(msg._from);
-  }
-
-  // ---- WebRTC ----
-  async function startCall(targetUsername) {
-    if (callState) { alert("Already in a call"); return; }
-    try {
-      callState = "outgoing";
-      callPeer = targetUsername;
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      peerConnection = createPeerConnection(targetUsername);
-      localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
-      sendWs({ type: "call-offer", to: targetUsername, sdp: offer.sdp });
-      showCallWindow(targetUsername, localStream, null);
-      minifyChat();
-    } catch (e) {
-      console.error("startCall error", e);
-      endCall("error");
-    }
-  }
-
-  async function acceptCall() {
-    if (callState !== "incoming" || !pendingOffer) return;
-    hideIncomingCallBanner();
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      peerConnection = createPeerConnection(callPeer);
-      localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
-      await peerConnection.setRemoteDescription(
-        new RTCSessionDescription({ type: "offer", sdp: pendingOffer })
-      );
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      sendWs({ type: "call-answer", to: callPeer, sdp: answer.sdp });
-      callState = "active";
-      pendingOffer = null;
-      showCallWindow(callPeer, localStream, null);
-      minifyChat();
-    } catch (e) {
-      console.error("acceptCall error", e);
-      endCall("error");
-    }
-  }
-
-  function rejectCall() {
-    if (callState !== "incoming") return;
-    sendWs({ type: "call-reject", to: callPeer });
-    hideIncomingCallBanner();
-    callState = null;
-    callPeer = null;
-    pendingOffer = null;
-  }
-
-  function endCall(reason = "ended") {
-    if (callPeer && callState && callState !== "ended") {
-      sendWs({ type: "call-end", to: callPeer });
-    }
-    if (peerConnection) { try { peerConnection.close(); } catch (e) {} peerConnection = null; }
-    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-    callState = null;
-    callPeer = null;
-    pendingOffer = null;
-    hideCallWindow();
-    hideIncomingCallBanner();
-  }
-
-  function createPeerConnection(targetUsername) {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-
-    pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        sendWs({ type: "call-ice", to: targetUsername, candidate: e.candidate });
-      }
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
-        callState = "active";
-        updateCallStatus("🟢 Connected");
-      }
-      if (pc.iceConnectionState === "failed") {
-        updateCallStatus("❌ Connection failed");
-        endCall("failed");
-      }
-      if (pc.iceConnectionState === "disconnected") {
-        updateCallStatus("⚠️ Reconnecting...");
-      }
-    };
-
-    pc.ontrack = (e) => {
-      setRemoteStream(e.streams[0]);
-    };
-
-    return pc;
-  }
-
-  // ---- Public controller interface ----
-  const ctrl = {
-    active: true,
-    async getMessages() {
-      const url = `${CHAT_BASE}/room/${encodeURIComponent(currentRoom)}/messages`;
-      const proof = await fetchRoomProof(token, currentRoom);
-      const headers = {};
-      if (token) headers.Authorization = token;
-      if (proof) headers["X-Room-Auth"] = proof;
-      const pwd = getRoomPassword(currentRoom);
-      if (pwd) headers["X-Room-Password"] = pwd;
-      const res = await fetchWithTimeout(url, { headers }, 8000);
-      if (res.status === 401 || res.status === 403) {
-        const ans = await promptPasswordForRoom(currentRoom, "access");
-        if (!ans || !ans.password) throw new Error("Auth required");
-        if (ans.remember) {
-          const saved = await postSaveRoomPassword(token, currentRoom, ans.password);
-          if (saved) userRoomPasswords[currentRoom] = ans.password;
+        appendMessageToContainer(msgBox, msg, lastMessages.length);
+        lastMessages.push(msg);
+        lastCount = lastMessages.length;
+        if (wasAtBottom) {
+          msgBox.scrollTop = msgBox.scrollHeight;
+          newMsgBtn.style.display = "none";
         } else {
-          sessionRoomPasswords[currentRoom] = ans.password;
+          newMsgBtn.style.display = "block";
         }
-        delete roomProofs[currentRoom];
-        const proof2 = await fetchRoomProof(token, currentRoom);
-        const headers2 = {};
-        if (token) headers2.Authorization = token;
-        if (proof2) headers2["X-Room-Auth"] = proof2;
-        headers2["X-Room-Password"] = ans.password;
-        const res2 = await fetchWithTimeout(url, { headers: headers2 }, 8000);
-        if (res2.status === 401 || res2.status === 403) throw new Error("Auth failed");
-        return res2.json();
+        refreshTimestampsIn(msgBox);
       }
-      return res.json();
-    },
-    async sendMessage(text) {
-      // Try WebSocket first
-      if (sendWs({ type: "chat", text })) return { success: true };
-      // Fall back to HTTP
-      const url = `${CHAT_BASE}/room/${encodeURIComponent(currentRoom)}/send`;
-      const proof = await fetchRoomProof(token, currentRoom);
-      const headers = { "Content-Type": "application/json" };
-      if (token) headers.Authorization = token;
-      if (proof) headers["X-Room-Auth"] = proof;
-      const pwd = getRoomPassword(currentRoom);
-      if (pwd) headers["X-Room-Password"] = pwd;
-      const res = await fetchWithTimeout(url, {
-        method: "POST", headers,
-        body: JSON.stringify({ text })
-      }, 8000);
-      if (res.status === 401 || res.status === 403) {
-        const ans = await promptPasswordForRoom(currentRoom, "access");
-        if (!ans || !ans.password) throw new Error("Auth required");
-        if (ans.remember) {
-          const saved = await postSaveRoomPassword(token, currentRoom, ans.password);
-          if (saved) userRoomPasswords[currentRoom] = ans.password;
-        } else {
-          sessionRoomPasswords[currentRoom] = ans.password;
-        }
-        delete roomProofs[currentRoom];
-        const proof2 = await fetchRoomProof(token, currentRoom);
-        const headers2 = { "Content-Type": "application/json" };
-        if (token) headers2.Authorization = token;
-        if (proof2) headers2["X-Room-Auth"] = proof2;
-        headers2["X-Room-Password"] = ans.password;
-        const res2 = await fetchWithTimeout(url, {
-          method: "POST", headers: headers2,
-          body: JSON.stringify({ text })
-        }, 8000);
-        if (res2.status === 401 || res2.status === 403) throw new Error("Auth failed");
-        return res2.json();
-      }
-      return res.json();
-    },
-    isUserAtBottom() {
-      return (msgBox.scrollHeight - (msgBox.scrollTop + msgBox.clientHeight)) < 80;
-    },
-    async loadMessagesOnce({ forceScroll = false } = {}) {
-      let data;
-      try { data = await this.getMessages(); } catch (e) { return; }
-      if (!data || !Array.isArray(data.messages)) return;
-      const newMessages = data.messages;
-      const wasAtBottom = this.isUserAtBottom();
-      msgBox.innerHTML = "";
-      msgBox.appendChild(newMsgBtn);
-      newMessages.forEach((m, i) => appendMessageToContainer(msgBox, m, i));
-      lastCount = newMessages.length;
-      lastMessages = newMessages;
-      if (wasAtBottom || forceScroll) msgBox.scrollTop = msgBox.scrollHeight;
-    },
-    async start() {
-      await this.loadMessagesOnce({ forceScroll: true });
-      connectWs();
-      pollTimer = setTimeout(slowPoll, SLOW_POLL_MS);
-    },
-    stop() {
-      wsActive = false;
-      wsPaused = true;
-      closeWs();
-      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
-    },
-    pause() {
-      wsPaused = true;
-      closeWs();
-      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
-    },
-    resume() {
-      wsPaused = false;
-      wsActive = true;
-      connectWs();
-      pollTimer = setTimeout(slowPoll, SLOW_POLL_MS);
-    },
-    // Expose call methods
-    startCall,
-    acceptCall,
-    rejectCall,
-    endCall,
-    get currentUsers() { return currentUsers; }
-  };
 
-  return ctrl;
-}
+      // ---- Slow poll fallback ----
+      async function slowPoll() {
+        if (!wsActive || wsPaused) return;
+        try {
+          const data = await ctrl.getMessages();
+          if (!data || !Array.isArray(data.messages)) return;
+          const newMessages = data.messages;
+          if (newMessages.length !== lastCount) {
+            const wasAtBottom = ctrl.isUserAtBottom();
+            msgBox.innerHTML = "";
+            msgBox.appendChild(newMsgBtn);
+            newMessages.forEach((m, i) => appendMessageToContainer(msgBox, m, i));
+            lastCount = newMessages.length;
+            lastMessages = newMessages;
+            if (wasAtBottom) msgBox.scrollTop = msgBox.scrollHeight;
+          }
+        } catch (e) {}
+        if (wsActive) pollTimer = setTimeout(slowPoll, SLOW_POLL_MS);
+      }
+
+      // ---- Call signaling ----
+      function handleCallSignal(msg) {
+        switch (msg.type) {
+          case "call-offer":
+            if (callState) return; // already in a call
+            handleIncomingOffer(msg);
+            break;
+          case "call-answer":
+            if (callState === "outgoing" && peerConnection) {
+              peerConnection.setRemoteDescription(
+                new RTCSessionDescription({ type: "answer", sdp: msg.sdp })
+              ).catch(e => console.error("setRemoteDescription error", e));
+            }
+            break;
+          case "call-ice":
+            if (peerConnection && msg.candidate) {
+              peerConnection.addIceCandidate(
+                new RTCIceCandidate(msg.candidate)
+              ).catch(e => console.error("addIceCandidate error", e));
+            }
+            break;
+          case "call-end":
+          case "call-reject":
+            endCall(msg.type === "call-reject" ? "rejected" : "ended");
+            break;
+        }
+      }
+
+      // ---- Incoming offer ----
+      function handleIncomingOffer(msg) {
+        callState = "incoming";
+        callPeer = msg._from;
+        pendingOffer = msg.sdp;
+        showIncomingCallBanner(msg._from);
+      }
+
+      // ---- WebRTC ----
+      async function startCall(targetUsername) {
+        if (callState) { alert("Already in a call"); return; }
+        try {
+          callState = "outgoing";
+          callPeer = targetUsername;
+          localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          peerConnection = createPeerConnection(targetUsername);
+          localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+          const offer = await peerConnection.createOffer();
+          await peerConnection.setLocalDescription(offer);
+          sendWs({ type: "call-offer", to: targetUsername, sdp: offer.sdp });
+          showCallWindow(targetUsername, localStream, null);
+          minifyChat();
+        } catch (e) {
+          console.error("startCall error", e);
+          endCall("error");
+        }
+      }
+
+      async function acceptCall() {
+        if (callState !== "incoming" || !pendingOffer) return;
+        hideIncomingCallBanner();
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          peerConnection = createPeerConnection(callPeer);
+          localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+          await peerConnection.setRemoteDescription(
+            new RTCSessionDescription({ type: "offer", sdp: pendingOffer })
+          );
+          const answer = await peerConnection.createAnswer();
+          await peerConnection.setLocalDescription(answer);
+          sendWs({ type: "call-answer", to: callPeer, sdp: answer.sdp });
+          callState = "active";
+          pendingOffer = null;
+          showCallWindow(callPeer, localStream, null);
+          minifyChat();
+        } catch (e) {
+          console.error("acceptCall error", e);
+          endCall("error");
+        }
+      }
+
+      function rejectCall() {
+        if (callState !== "incoming") return;
+        sendWs({ type: "call-reject", to: callPeer });
+        hideIncomingCallBanner();
+        callState = null;
+        callPeer = null;
+        pendingOffer = null;
+      }
+
+      function endCall(reason = "ended") {
+        if (callPeer && callState && callState !== "ended") {
+          sendWs({ type: "call-end", to: callPeer });
+        }
+        if (peerConnection) { try { peerConnection.close(); } catch (e) {} peerConnection = null; }
+        if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+        callState = null;
+        callPeer = null;
+        pendingOffer = null;
+        hideCallWindow();
+        hideIncomingCallBanner();
+      }
+
+      function createPeerConnection(targetUsername) {
+        const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+        pc.onicecandidate = (e) => {
+          if (e.candidate) {
+            sendWs({ type: "call-ice", to: targetUsername, candidate: e.candidate });
+          }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+            callState = "active";
+            updateCallStatus("🟢 Connected");
+          }
+          if (pc.iceConnectionState === "failed") {
+            updateCallStatus("❌ Connection failed");
+            endCall("failed");
+          }
+          if (pc.iceConnectionState === "disconnected") {
+            updateCallStatus("⚠️ Reconnecting...");
+          }
+        };
+
+        pc.ontrack = (e) => {
+          setRemoteStream(e.streams[0]);
+        };
+
+        return pc;
+      }
+
+      // ---- Public controller interface ----
+      const ctrl = {
+        active: true,
+        async getMessages() {
+          const url = `${CHAT_BASE}/room/${encodeURIComponent(currentRoom)}/messages`;
+          const proof = await fetchRoomProof(token, currentRoom);
+          const headers = {};
+          if (token) headers.Authorization = token;
+          if (proof) headers["X-Room-Auth"] = proof;
+          const pwd = getRoomPassword(currentRoom);
+          if (pwd) headers["X-Room-Password"] = pwd;
+          const res = await fetchWithTimeout(url, { headers }, 8000);
+          if (res.status === 401 || res.status === 403) {
+            const ans = await promptPasswordForRoom(currentRoom, "access");
+            if (!ans || !ans.password) throw new Error("Auth required");
+            if (ans.remember) {
+              const saved = await postSaveRoomPassword(token, currentRoom, ans.password);
+              if (saved) userRoomPasswords[currentRoom] = ans.password;
+            } else {
+              sessionRoomPasswords[currentRoom] = ans.password;
+            }
+            delete roomProofs[currentRoom];
+            const proof2 = await fetchRoomProof(token, currentRoom);
+            const headers2 = {};
+            if (token) headers2.Authorization = token;
+            if (proof2) headers2["X-Room-Auth"] = proof2;
+            headers2["X-Room-Password"] = ans.password;
+            const res2 = await fetchWithTimeout(url, { headers: headers2 }, 8000);
+            if (res2.status === 401 || res2.status === 403) throw new Error("Auth failed");
+            return res2.json();
+          }
+          return res.json();
+        },
+        async sendMessage(text) {
+          // Try WebSocket first
+          if (sendWs({ type: "chat", text })) return { success: true };
+          // Fall back to HTTP
+          const url = `${CHAT_BASE}/room/${encodeURIComponent(currentRoom)}/send`;
+          const proof = await fetchRoomProof(token, currentRoom);
+          const headers = { "Content-Type": "application/json" };
+          if (token) headers.Authorization = token;
+          if (proof) headers["X-Room-Auth"] = proof;
+          const pwd = getRoomPassword(currentRoom);
+          if (pwd) headers["X-Room-Password"] = pwd;
+          const res = await fetchWithTimeout(url, {
+            method: "POST", headers,
+            body: JSON.stringify({ text })
+          }, 8000);
+          if (res.status === 401 || res.status === 403) {
+            const ans = await promptPasswordForRoom(currentRoom, "access");
+            if (!ans || !ans.password) throw new Error("Auth required");
+            if (ans.remember) {
+              const saved = await postSaveRoomPassword(token, currentRoom, ans.password);
+              if (saved) userRoomPasswords[currentRoom] = ans.password;
+            } else {
+              sessionRoomPasswords[currentRoom] = ans.password;
+            }
+            delete roomProofs[currentRoom];
+            const proof2 = await fetchRoomProof(token, currentRoom);
+            const headers2 = { "Content-Type": "application/json" };
+            if (token) headers2.Authorization = token;
+            if (proof2) headers2["X-Room-Auth"] = proof2;
+            headers2["X-Room-Password"] = ans.password;
+            const res2 = await fetchWithTimeout(url, {
+              method: "POST", headers: headers2,
+              body: JSON.stringify({ text })
+            }, 8000);
+            if (res2.status === 401 || res2.status === 403) throw new Error("Auth failed");
+            return res2.json();
+          }
+          return res.json();
+        },
+        isUserAtBottom() {
+          return (msgBox.scrollHeight - (msgBox.scrollTop + msgBox.clientHeight)) < 80;
+        },
+        async loadMessagesOnce({ forceScroll = false } = {}) {
+          let data;
+          try { data = await this.getMessages(); } catch (e) { return; }
+          if (!data || !Array.isArray(data.messages)) return;
+          const newMessages = data.messages;
+          const wasAtBottom = this.isUserAtBottom();
+          msgBox.innerHTML = "";
+          msgBox.appendChild(newMsgBtn);
+          newMessages.forEach((m, i) => appendMessageToContainer(msgBox, m, i));
+          lastCount = newMessages.length;
+          lastMessages = newMessages;
+          if (wasAtBottom || forceScroll) msgBox.scrollTop = msgBox.scrollHeight;
+        },
+        async start() {
+          await this.loadMessagesOnce({ forceScroll: true });
+          connectWs();
+          pollTimer = setTimeout(slowPoll, SLOW_POLL_MS);
+        },
+        stop() {
+          wsActive = false;
+          wsPaused = true;
+          closeWs();
+          if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+        },
+        pause() {
+          wsPaused = true;
+          closeWs();
+          if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+        },
+        resume() {
+          wsPaused = false;
+          wsActive = true;
+          connectWs();
+          pollTimer = setTimeout(slowPoll, SLOW_POLL_MS);
+        },
+        // Expose call methods
+        startCall,
+        acceptCall,
+        rejectCall,
+        endCall,
+        get currentUsers() { return currentUsers; }
+      };
+
+      return ctrl;
+    }
 
     // initialize controller
-    let chatController = makeChatController();
+    let chatController = makeWsController();
     box._chatController = chatController;
-    chatController.pollLoop();
-    await chatController.loadMessagesOnce().catch(() => {});
+    await chatController.start();
 
     const TIMESTAMP_REFRESH_MS = 30 * 1000;
     box._timeUpdater = setInterval(() => refreshTimestampsIn(msgBox), TIMESTAMP_REFRESH_MS);
@@ -1930,14 +1929,14 @@ function makeWsController() {
     };
 
     // Call button
-const callBtn = box.querySelector("#callBtn");
-callBtn.addEventListener("click", () => {
-  if (userListVisible) {
-    hideUserList();
-  } else {
-    showUserList();
-  }
-});
+    const callBtn = box.querySelector("#callBtn");
+    callBtn.addEventListener("click", () => {
+      if (userListVisible) {
+        hideUserList();
+      } else {
+        showUserList();
+      }
+    });
 
     closeBtn.onclick = () => {
       if (box._chatController) try { box._chatController.stop(); } catch (e) {}
@@ -1979,434 +1978,434 @@ callBtn.addEventListener("click", () => {
 
     // Room switching logic (updated)
     async function switchRoom(newRoomName) {
-  if (!newRoomName || !newRoomName.trim()) { alert("Room name required"); return; }
-  const trimmed = newRoomName.trim();
-  if (trimmed === currentRoom) {
-    currentRoomDisplay.textContent = `room: ${currentRoom}`; return;
-  }
-  chatController.stop();
-  if (box._timeUpdater) { clearInterval(box._timeUpdater); box._timeUpdater = null; }
-  msgBox.innerHTML = "";
-  msgBox.appendChild(newMsgBtn);
-  currentRoom = trimmed;
-  try { localStorage.setItem("dole_chat_room", currentRoom); } catch (e) {}
-  if (currentRoomDisplay) currentRoomDisplay.textContent = `room: ${currentRoom}`;
-  addRoomToList(currentRoom);
-  chatController = makeWsController();
-  box._chatController = chatController;
-  await chatController.start();
-  box._timeUpdater = setInterval(() => refreshTimestampsIn(msgBox), TIMESTAMP_REFRESH_MS);
-  refreshTimestampsIn(msgBox);
-}
+      if (!newRoomName || !newRoomName.trim()) { alert("Room name required"); return; }
+      const trimmed = newRoomName.trim();
+      if (trimmed === currentRoom) {
+        currentRoomDisplay.textContent = `room: ${currentRoom}`; return;
+      }
+      chatController.stop();
+      if (box._timeUpdater) { clearInterval(box._timeUpdater); box._timeUpdater = null; }
+      msgBox.innerHTML = "";
+      msgBox.appendChild(newMsgBtn);
+      currentRoom = trimmed;
+      try { localStorage.setItem("dole_chat_room", currentRoom); } catch (e) {}
+      if (currentRoomDisplay) currentRoomDisplay.textContent = `room: ${currentRoom}`;
+      addRoomToList(currentRoom);
+      chatController = makeWsController();
+      box._chatController = chatController;
+      await chatController.start();
+      box._timeUpdater = setInterval(() => refreshTimestampsIn(msgBox), TIMESTAMP_REFRESH_MS);
+      refreshTimestampsIn(msgBox);
+    }
 
     // ---- WebSocket indicator ----
-function updateWsIndicator(connected) {
-  const dot = box.querySelector("#wsIndicator");
-  if (!dot) return;
-  dot.style.background = connected ? "#68d391" : "#fc8181";
-  dot.title = connected ? "Live connection" : "Reconnecting...";
-}
-
-// ---- Minify helper (used by call start/accept) ----
-function minifyChat() {
-  if (minIcon) return;
-  minIcon = createMinIcon();
-  box.style.display = "none";
-  chatController.pause();
-}
-
-// ---- Resize handle helper ----
-function makeResizable(el, minW = 280, minH = 320) {
-  const handle = document.createElement("div");
-  Object.assign(handle.style, {
-    position: "absolute",
-    right: "0",
-    bottom: "0",
-    width: "28px",
-    height: "28px",
-    cursor: "se-resize",
-    display: "flex",
-    alignItems: "flex-end",
-    justifyContent: "flex-end",
-    padding: "6px",
-    zIndex: 10,
-    touchAction: "none",
-  });
-  handle.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-    <path d="M11 1L1 11M11 6L6 11M11 11" stroke="rgba(255,255,255,0.3)" stroke-width="1.5" stroke-linecap="round"/>
-  </svg>`;
-  el.style.position = "fixed";
-  el.appendChild(handle);
-
-  let resizing = false, startX = 0, startY = 0, startW = 0, startH = 0;
-
-  handle.addEventListener("pointerdown", e => {
-    resizing = true;
-    startX = e.clientX;
-    startY = e.clientY;
-    startW = el.offsetWidth;
-    startH = el.offsetHeight;
-    handle.setPointerCapture(e.pointerId);
-    e.preventDefault();
-  });
-  handle.addEventListener("pointermove", e => {
-    if (!resizing) return;
-    const newW = Math.max(minW, startW + (e.clientX - startX));
-    const newH = Math.max(minH, startH + (e.clientY - startY));
-    el.style.width = newW + "px";
-    el.style.height = newH + "px";
-    e.preventDefault();
-  });
-  handle.addEventListener("pointerup", () => resizing = false);
-}
-
-// ---- User list panel ----
-let userListVisible = false;
-
-const userListPanel = document.createElement("div");
-userListPanel.id = "userListPanel";
-Object.assign(userListPanel.style, {
-  position: "absolute",
-  left: "0",
-  right: "0",
-  top: "0",
-  background: "linear-gradient(180deg,#0d0e10,#111214)",
-  zIndex: 45,
-  display: "none",
-  flexDirection: "column",
-  borderRadius: "12px 12px 0 0",
-  overflow: "hidden",
-  boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-  border: "1px solid rgba(255,255,255,0.04)",
-  transition: "transform 0.25s ease",
-  transform: "translateY(-100%)",
-});
-
-userListPanel.innerHTML = `
-  <div style="padding:14px 16px; background:#0d0e10; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.04);">
-    <div style="font-weight:700; font-size:15px; color:#e6eefc;">📞 Call Someone</div>
-    <button id="closeUserList" style="background:#333; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:14px; min-width:44px; min-height:44px;">✕</button>
-  </div>
-  <div id="userListInner" style="padding:12px; display:flex; flex-direction:column; gap:10px; overflow-y:auto; max-height:280px; -webkit-overflow-scrolling:touch;"></div>
-  <div id="userListEmpty" style="padding:20px; text-align:center; font-size:14px; color:#9fb0e6; opacity:0.8; display:none;">No other users online in this room right now.</div>
-`;
-box.appendChild(userListPanel);
-
-function renderUserList() {
-  const inner = userListPanel.querySelector("#userListInner");
-  const empty = userListPanel.querySelector("#userListEmpty");
-  const users = chatController ? chatController.currentUsers : [];
-  inner.innerHTML = "";
-
-  if (!users || users.length === 0) {
-    inner.style.display = "none";
-    empty.style.display = "block";
-    return;
-  }
-
-  inner.style.display = "flex";
-  empty.style.display = "none";
-
-  for (const u of users) {
-    const row = document.createElement("div");
-    Object.assign(row.style, {
-      display: "flex",
-      alignItems: "center",
-      gap: "12px",
-      padding: "12px",
-      borderRadius: "10px",
-      background: "rgba(255,255,255,0.03)",
-      border: "1px solid rgba(255,255,255,0.04)",
-    });
-
-    const avatar = document.createElement("div");
-    Object.assign(avatar.style, {
-      width: "40px",
-      height: "40px",
-      borderRadius: "50%",
-      background: "#5865f2",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: "18px",
-      fontWeight: "700",
-      color: "#fff",
-      flexShrink: "0",
-    });
-    avatar.textContent = u.charAt(0).toUpperCase();
-    row.appendChild(avatar);
-
-    const name = document.createElement("div");
-    name.style.flex = "1";
-    name.style.fontWeight = "600";
-    name.style.fontSize = "15px";
-    name.style.color = "#e6eefc";
-    name.textContent = u;
-    row.appendChild(name);
-
-    const callBtn = document.createElement("button");
-    Object.assign(callBtn.style, {
-      padding: "10px 16px",
-      borderRadius: "10px",
-      border: "none",
-      background: "#2f855a",
-      color: "#fff",
-      cursor: "pointer",
-      fontSize: "20px",
-      minWidth: "50px",
-      minHeight: "50px",
-    });
-    callBtn.textContent = "📞";
-    callBtn.title = `Call ${u}`;
-    callBtn.addEventListener("click", () => {
-      hideUserList();
-      chatController.startCall(u);
-    });
-    row.appendChild(callBtn);
-
-    inner.appendChild(row);
-  }
-}
-
-function showUserList() {
-  userListVisible = true;
-  userListPanel.style.display = "flex";
-  requestAnimationFrame(() => {
-    userListPanel.style.transform = "translateY(0)";
-  });
-  renderUserList();
-}
-
-function hideUserList() {
-  userListVisible = false;
-  userListPanel.style.transform = "translateY(-100%)";
-  setTimeout(() => {
-    if (!userListVisible) userListPanel.style.display = "none";
-  }, 260);
-}
-
-userListPanel.querySelector("#closeUserList").addEventListener("click", hideUserList);
-
-// ---- Incoming call banner ----
-const incomingBanner = document.createElement("div");
-incomingBanner.id = "incomingCallBanner";
-Object.assign(incomingBanner.style, {
-  position: "absolute",
-  left: "0",
-  right: "0",
-  top: "0",
-  background: "linear-gradient(135deg, #1a472a, #2f855a)",
-  zIndex: 46,
-  display: "none",
-  flexDirection: "column",
-  alignItems: "center",
-  padding: "20px 16px",
-  gap: "14px",
-  borderRadius: "12px 12px 0 0",
-  boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-  border: "1px solid rgba(255,255,255,0.06)",
-});
-
-incomingBanner.innerHTML = `
-  <div style="font-size:32px;">📞</div>
-  <div id="incomingCallerName" style="font-size:17px; font-weight:700; color:#fff; text-align:center;"></div>
-  <div style="font-size:13px; color:rgba(255,255,255,0.7);">Incoming video call</div>
-  <div style="display:flex; gap:16px; width:100%; justify-content:center;">
-    <button id="acceptCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#68d391; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:52px;">Accept ✓</button>
-    <button id="rejectCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#fc8181; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:52px;">Reject ✕</button>
-  </div>
-`;
-box.appendChild(incomingBanner);
-
-incomingBanner.querySelector("#acceptCallBtn").addEventListener("click", () => {
-  chatController.acceptCall();
-});
-incomingBanner.querySelector("#rejectCallBtn").addEventListener("click", () => {
-  chatController.rejectCall();
-});
-
-function showIncomingCallBanner(callerName) {
-  incomingBanner.querySelector("#incomingCallerName").textContent = callerName + " is calling...";
-  incomingBanner.style.display = "flex";
-}
-
-function hideIncomingCallBanner() {
-  incomingBanner.style.display = "none";
-}
-
-// ---- Call window ----
-let callWindow = null;
-let remoteVideoEl = null;
-let localVideoEl = null;
-let callStatusEl = null;
-
-function showCallWindow(peerName, lStream, rStream) {
-  if (callWindow) { try { callWindow.remove(); } catch(e) {} }
-
-  callWindow = document.createElement("div");
-  Object.assign(callWindow.style, {
-    position: "fixed",
-    top: "20px",
-    left: "20px",
-    width: "min(92vw, 420px)",
-    height: "min(85vh, 560px)",
-    background: "#0d0e10",
-    borderRadius: "16px",
-    zIndex: 1000001,
-    display: "flex",
-    flexDirection: "column",
-    overflow: "hidden",
-    boxShadow: "0 16px 48px rgba(0,0,0,0.7)",
-    border: "1px solid rgba(255,255,255,0.06)",
-    fontFamily: "Inter, Arial, sans-serif",
-    touchAction: "none",
-  });
-
-  callWindow.innerHTML = `
-    <div id="callHeader" style="padding:14px 16px; background:#080909; display:flex; align-items:center; gap:10px; cursor:grab; user-select:none; flex-shrink:0;">
-      <div style="width:10px; height:10px; border-radius:50%; background:#fc8181;" id="callDot"></div>
-      <div style="flex:1; font-weight:700; font-size:15px; color:#e6eefc;" id="callHeaderName">Calling ${escapeHtml(peerName)}...</div>
-      <div id="callStatus" style="font-size:12px; color:#9fb0e6; opacity:0.8;"></div>
-      <button id="callCloseBtn" style="background:#333; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:14px; min-width:44px; min-height:44px;">✕</button>
-    </div>
-
-    <div style="flex:1; position:relative; background:#000; overflow:hidden;">
-      <video id="remoteVideo" autoplay playsinline style="width:100%; height:100%; object-fit:cover; display:block;"></video>
-      <video id="localVideo" autoplay muted playsinline style="
-        position:absolute;
-        bottom:14px;
-        right:14px;
-        width:110px;
-        height:82px;
-        object-fit:cover;
-        border-radius:10px;
-        border:2px solid rgba(255,255,255,0.15);
-        background:#111;
-        box-shadow:0 4px 12px rgba(0,0,0,0.5);
-        z-index:2;
-      "></video>
-      <div id="callWaiting" style="
-        position:absolute;
-        inset:0;
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        justify-content:center;
-        gap:14px;
-        color:#e6eefc;
-      ">
-        <div style="font-size:52px;">👤</div>
-        <div style="font-size:15px; opacity:0.7;">Waiting for ${escapeHtml(peerName)}...</div>
-      </div>
-    </div>
-
-    <div style="padding:16px; background:#080909; display:flex; gap:12px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
-      <button id="callMuteBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center;">🎤</button>
-      <button id="callVideoBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center;">📷</button>
-      <button id="callEndBtn" style="width:72px; height:72px; border-radius:50%; border:none; background:#e53e3e; color:#fff; font-size:26px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(229,62,62,0.4);">📵</button>
-    </div>
-  `;
-
-  document.body.appendChild(callWindow);
-
-  remoteVideoEl = callWindow.querySelector("#remoteVideo");
-  localVideoEl = callWindow.querySelector("#localVideo");
-  callStatusEl = callWindow.querySelector("#callStatus");
-  const callDot = callWindow.querySelector("#callDot");
-  const callWaiting = callWindow.querySelector("#callWaiting");
-  const callHeaderName = callWindow.querySelector("#callHeaderName");
-
-  // Set local stream immediately
-  if (lStream) localVideoEl.srcObject = lStream;
-
-  // Set remote stream if already available
-  if (rStream) {
-    remoteVideoEl.srcObject = rStream;
-    callWaiting.style.display = "none";
-  }
-
-  // Drag
-  const callHeader = callWindow.querySelector("#callHeader");
-  let drag = false, ox = 0, oy = 0;
-  callHeader.addEventListener("pointerdown", e => {
-    if (e.target.tagName === "BUTTON") return;
-    drag = true;
-    ox = e.clientX - callWindow.getBoundingClientRect().left;
-    oy = e.clientY - callWindow.getBoundingClientRect().top;
-    callHeader.setPointerCapture(e.pointerId);
-  });
-  callHeader.addEventListener("pointermove", e => {
-    if (!drag) return;
-    callWindow.style.left = Math.max(0, Math.min(window.innerWidth - callWindow.offsetWidth, e.clientX - ox)) + "px";
-    callWindow.style.top = Math.max(0, Math.min(window.innerHeight - callWindow.offsetHeight, e.clientY - oy)) + "px";
-    e.preventDefault();
-  });
-  callHeader.addEventListener("pointerup", () => drag = false);
-
-  // Resize
-  makeResizable(callWindow, 300, 360);
-
-  // Controls
-  let muted = false, vidHidden = false;
-  const muteBtn = callWindow.querySelector("#callMuteBtn");
-  const videoBtn = callWindow.querySelector("#callVideoBtn");
-  const endBtn = callWindow.querySelector("#callEndBtn");
-  const closeBtn = callWindow.querySelector("#callCloseBtn");
-
-  muteBtn.addEventListener("click", () => {
-    muted = !muted;
-    if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = !muted);
-    muteBtn.textContent = muted ? "🔇" : "🎤";
-    muteBtn.style.background = muted ? "#e53e3e" : "#2d3748";
-  });
-
-  videoBtn.addEventListener("click", () => {
-    vidHidden = !vidHidden;
-    if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = !vidHidden);
-    videoBtn.textContent = vidHidden ? "🚫" : "📷";
-    videoBtn.style.background = vidHidden ? "#e53e3e" : "#2d3748";
-  });
-
-  endBtn.addEventListener("click", () => chatController.endCall());
-  closeBtn.addEventListener("click", () => chatController.endCall());
-
-  // Update dot and waiting screen when connected
-  const origUpdateCallStatus = updateCallStatus;
-  window.__callStatusUpdater = (msg) => {
-    if (callStatusEl) callStatusEl.textContent = msg;
-    if (msg.includes("🟢")) {
-      callDot.style.background = "#68d391";
-      callHeaderName.textContent = peerName;
-      callWaiting.style.display = "none";
+    function updateWsIndicator(connected) {
+      const dot = box.querySelector("#wsIndicator");
+      if (!dot) return;
+      dot.style.background = connected ? "#68d391" : "#fc8181";
+      dot.title = connected ? "Live connection" : "Reconnecting...";
     }
-  };
-}
 
-function hideCallWindow() {
-  if (callWindow) {
-    try { callWindow.remove(); } catch (e) {}
-    callWindow = null;
-    remoteVideoEl = null;
-    localVideoEl = null;
-    callStatusEl = null;
-    window.__callStatusUpdater = null;
-  }
-}
+    // ---- Minify helper (used by call start/accept) ----
+    function minifyChat() {
+      if (minIcon) return;
+      minIcon = createMinIcon();
+      box.style.display = "none";
+      chatController.pause();
+    }
 
-function setRemoteStream(stream) {
-  if (remoteVideoEl) {
-    remoteVideoEl.srcObject = stream;
-    const waiting = callWindow && callWindow.querySelector("#callWaiting");
-    if (waiting) waiting.style.display = "none";
-  }
-}
+    // ---- Resize handle helper ----
+    function makeResizable(el, minW = 280, minH = 320) {
+      const handle = document.createElement("div");
+      Object.assign(handle.style, {
+        position: "absolute",
+        right: "0",
+        bottom: "0",
+        width: "28px",
+        height: "28px",
+        cursor: "se-resize",
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "flex-end",
+        padding: "6px",
+        zIndex: 10,
+        touchAction: "none",
+      });
+      handle.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <path d="M11 1L1 11M11 6L6 11M11 11" stroke="rgba(255,255,255,0.3)" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>`;
+      el.style.position = "fixed";
+      el.appendChild(handle);
 
-function updateCallStatus(msg) {
-  if (window.__callStatusUpdater) window.__callStatusUpdater(msg);
-}
+      let resizing = false, startX = 0, startY = 0, startW = 0, startH = 0;
 
-// Make chat box resizable too
-makeResizable(box, 300, 400);
+      handle.addEventListener("pointerdown", e => {
+        resizing = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        startW = el.offsetWidth;
+        startH = el.offsetHeight;
+        handle.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      });
+      handle.addEventListener("pointermove", e => {
+        if (!resizing) return;
+        const newW = Math.max(minW, startW + (e.clientX - startX));
+        const newH = Math.max(minH, startH + (e.clientY - startY));
+        el.style.width = newW + "px";
+        el.style.height = newH + "px";
+        e.preventDefault();
+      });
+      handle.addEventListener("pointerup", () => resizing = false);
+    }
+
+    // ---- User list panel ----
+    let userListVisible = false;
+
+    const userListPanel = document.createElement("div");
+    userListPanel.id = "userListPanel";
+    Object.assign(userListPanel.style, {
+      position: "absolute",
+      left: "0",
+      right: "0",
+      top: "0",
+      background: "linear-gradient(180deg,#0d0e10,#111214)",
+      zIndex: 45,
+      display: "none",
+      flexDirection: "column",
+      borderRadius: "12px 12px 0 0",
+      overflow: "hidden",
+      boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+      border: "1px solid rgba(255,255,255,0.04)",
+      transition: "transform 0.25s ease",
+      transform: "translateY(-100%)",
+    });
+
+    userListPanel.innerHTML = `
+      <div style="padding:14px 16px; background:#0d0e10; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.04);">
+        <div style="font-weight:700; font-size:15px; color:#e6eefc;">📞 Call Someone</div>
+        <button id="closeUserList" style="background:#333; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:14px; min-width:44px; min-height:44px;">✕</button>
+      </div>
+      <div id="userListInner" style="padding:12px; display:flex; flex-direction:column; gap:10px; overflow-y:auto; max-height:280px; -webkit-overflow-scrolling:touch;"></div>
+      <div id="userListEmpty" style="padding:20px; text-align:center; font-size:14px; color:#9fb0e6; opacity:0.8; display:none;">No other users online in this room right now.</div>
+    `;
+    box.appendChild(userListPanel);
+
+    function renderUserList() {
+      const inner = userListPanel.querySelector("#userListInner");
+      const empty = userListPanel.querySelector("#userListEmpty");
+      const users = chatController ? chatController.currentUsers : [];
+      inner.innerHTML = "";
+
+      if (!users || users.length === 0) {
+        inner.style.display = "none";
+        empty.style.display = "block";
+        return;
+      }
+
+      inner.style.display = "flex";
+      empty.style.display = "none";
+
+      for (const u of users) {
+        const row = document.createElement("div");
+        Object.assign(row.style, {
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          padding: "12px",
+          borderRadius: "10px",
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.04)",
+        });
+
+        const avatar = document.createElement("div");
+        Object.assign(avatar.style, {
+          width: "40px",
+          height: "40px",
+          borderRadius: "50%",
+          background: "#5865f2",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: "18px",
+          fontWeight: "700",
+          color: "#fff",
+          flexShrink: "0",
+        });
+        avatar.textContent = u.charAt(0).toUpperCase();
+        row.appendChild(avatar);
+
+        const name = document.createElement("div");
+        name.style.flex = "1";
+        name.style.fontWeight = "600";
+        name.style.fontSize = "15px";
+        name.style.color = "#e6eefc";
+        name.textContent = u;
+        row.appendChild(name);
+
+        const callBtn = document.createElement("button");
+        Object.assign(callBtn.style, {
+          padding: "10px 16px",
+          borderRadius: "10px",
+          border: "none",
+          background: "#2f855a",
+          color: "#fff",
+          cursor: "pointer",
+          fontSize: "20px",
+          minWidth: "50px",
+          minHeight: "50px",
+        });
+        callBtn.textContent = "📞";
+        callBtn.title = `Call ${u}`;
+        callBtn.addEventListener("click", () => {
+          hideUserList();
+          chatController.startCall(u);
+        });
+        row.appendChild(callBtn);
+
+        inner.appendChild(row);
+      }
+    }
+
+    function showUserList() {
+      userListVisible = true;
+      userListPanel.style.display = "flex";
+      requestAnimationFrame(() => {
+        userListPanel.style.transform = "translateY(0)";
+      });
+      renderUserList();
+    }
+
+    function hideUserList() {
+      userListVisible = false;
+      userListPanel.style.transform = "translateY(-100%)";
+      setTimeout(() => {
+        if (!userListVisible) userListPanel.style.display = "none";
+      }, 260);
+    }
+
+    userListPanel.querySelector("#closeUserList").addEventListener("click", hideUserList);
+
+    // ---- Incoming call banner ----
+    const incomingBanner = document.createElement("div");
+    incomingBanner.id = "incomingCallBanner";
+    Object.assign(incomingBanner.style, {
+      position: "absolute",
+      left: "0",
+      right: "0",
+      top: "0",
+      background: "linear-gradient(135deg, #1a472a, #2f855a)",
+      zIndex: 46,
+      display: "none",
+      flexDirection: "column",
+      alignItems: "center",
+      padding: "20px 16px",
+      gap: "14px",
+      borderRadius: "12px 12px 0 0",
+      boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+      border: "1px solid rgba(255,255,255,0.06)",
+    });
+
+    incomingBanner.innerHTML = `
+      <div style="font-size:32px;">📞</div>
+      <div id="incomingCallerName" style="font-size:17px; font-weight:700; color:#fff; text-align:center;"></div>
+      <div style="font-size:13px; color:rgba(255,255,255,0.7);">Incoming video call</div>
+      <div style="display:flex; gap:16px; width:100%; justify-content:center;">
+        <button id="acceptCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#68d391; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:44px;">Accept</button>
+        <button id="rejectCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#fc8181; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:44px;">Reject</button>
+      </div>
+    `;
+    box.appendChild(incomingBanner);
+
+    incomingBanner.querySelector("#acceptCallBtn").addEventListener("click", () => {
+      chatController.acceptCall();
+    });
+    incomingBanner.querySelector("#rejectCallBtn").addEventListener("click", () => {
+      chatController.rejectCall();
+    });
+
+    function showIncomingCallBanner(callerName) {
+      incomingBanner.querySelector("#incomingCallerName").textContent = callerName + " is calling...";
+      incomingBanner.style.display = "flex";
+    }
+
+    function hideIncomingCallBanner() {
+      incomingBanner.style.display = "none";
+    }
+
+    // ---- Call window ----
+    let callWindow = null;
+    let remoteVideoEl = null;
+    let localVideoEl = null;
+    let callStatusEl = null;
+
+    function showCallWindow(peerName, lStream, rStream) {
+      if (callWindow) { try { callWindow.remove(); } catch(e) {} }
+
+      callWindow = document.createElement("div");
+      Object.assign(callWindow.style, {
+        position: "fixed",
+        top: "20px",
+        left: "20px",
+        width: "min(92vw, 420px)",
+        height: "min(85vh, 560px)",
+        background: "#0d0e10",
+        borderRadius: "16px",
+        zIndex: 1000001,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        boxShadow: "0 16px 48px rgba(0,0,0,0.7)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        fontFamily: "Inter, Arial, sans-serif",
+        touchAction: "none",
+      });
+
+      callWindow.innerHTML = `
+        <div id="callHeader" style="padding:14px 16px; background:#080909; display:flex; align-items:center; gap:10px; cursor:grab; user-select:none; flex-shrink:0;">
+          <div style="width:10px; height:10px; border-radius:50%; background:#fc8181;" id="callDot"></div>
+          <div style="flex:1; font-weight:700; font-size:15px; color:#e6eefc;" id="callHeaderName">Calling ${escapeHtml(peerName)}...</div>
+          <div id="callStatus" style="font-size:12px; color:#9fb0e6; opacity:0.8;"></div>
+          <button id="callCloseBtn" style="background:#333; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:14px; min-width:44px; min-height:44px;">✕</button>
+        </div>
+
+        <div style="flex:1; position:relative; background:#000; overflow:hidden;">
+          <video id="remoteVideo" autoplay playsinline style="width:100%; height:100%; object-fit:cover; display:block;"></video>
+          <video id="localVideo" autoplay muted playsinline style="
+            position:absolute;
+            bottom:14px;
+            right:14px;
+            width:110px;
+            height:82px;
+            object-fit:cover;
+            border-radius:10px;
+            border:2px solid rgba(255,255,255,0.15);
+            background:#111;
+            box-shadow:0 4px 12px rgba(0,0,0,0.5);
+            z-index:2;
+          "></video>
+          <div id="callWaiting" style="
+            position:absolute;
+            inset:0;
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            gap:14px;
+            color:#e6eefc;
+          ">
+            <div style="font-size:52px;">👤</div>
+            <div style="font-size:15px; opacity:0.7;">Waiting for ${escapeHtml(peerName)}...</div>
+          </div>
+        </div>
+
+        <div style="padding:16px; background:#080909; display:flex; gap:12px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
+          <button id="callMuteBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:56px;">🎤</button>
+          <button id="callVideoBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:56px;">📷</button>
+          <button id="callEndBtn" style="width:72px; height:72px; border-radius:50%; border:none; background:#e53e3e; color:#fff; font-size:26px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:72px;">📞</button>
+        </div>
+      `;
+
+      document.body.appendChild(callWindow);
+
+      remoteVideoEl = callWindow.querySelector("#remoteVideo");
+      localVideoEl = callWindow.querySelector("#localVideo");
+      callStatusEl = callWindow.querySelector("#callStatus");
+      const callDot = callWindow.querySelector("#callDot");
+      const callWaiting = callWindow.querySelector("#callWaiting");
+      const callHeaderName = callWindow.querySelector("#callHeaderName");
+
+      // Set local stream immediately
+      if (lStream) localVideoEl.srcObject = lStream;
+
+      // Set remote stream if already available
+      if (rStream) {
+        remoteVideoEl.srcObject = rStream;
+        callWaiting.style.display = "none";
+      }
+
+      // Drag
+      const callHeader = callWindow.querySelector("#callHeader");
+      let drag = false, ox = 0, oy = 0;
+      callHeader.addEventListener("pointerdown", e => {
+        if (e.target.tagName === "BUTTON") return;
+        drag = true;
+        ox = e.clientX - callWindow.getBoundingClientRect().left;
+        oy = e.clientY - callWindow.getBoundingClientRect().top;
+        callHeader.setPointerCapture(e.pointerId);
+      });
+      callHeader.addEventListener("pointermove", e => {
+        if (!drag) return;
+        callWindow.style.left = Math.max(0, Math.min(window.innerWidth - callWindow.offsetWidth, e.clientX - ox)) + "px";
+        callWindow.style.top = Math.max(0, Math.min(window.innerHeight - callWindow.offsetHeight, e.clientY - oy)) + "px";
+        e.preventDefault();
+      });
+      callHeader.addEventListener("pointerup", () => drag = false);
+
+      // Resize
+      makeResizable(callWindow, 300, 360);
+
+      // Controls
+      let muted = false, vidHidden = false;
+      const muteBtn = callWindow.querySelector("#callMuteBtn");
+      const videoBtn = callWindow.querySelector("#callVideoBtn");
+      const endBtn = callWindow.querySelector("#callEndBtn");
+      const closeBtn = callWindow.querySelector("#callCloseBtn");
+
+      muteBtn.addEventListener("click", () => {
+        muted = !muted;
+        if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = !muted);
+        muteBtn.textContent = muted ? "🔇" : "🎤";
+        muteBtn.style.background = muted ? "#e53e3e" : "#2d3748";
+      });
+
+      videoBtn.addEventListener("click", () => {
+        vidHidden = !vidHidden;
+        if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = !vidHidden);
+        videoBtn.textContent = vidHidden ? "🚫" : "📷";
+        videoBtn.style.background = vidHidden ? "#e53e3e" : "#2d3748";
+      });
+
+      endBtn.addEventListener("click", () => chatController.endCall());
+      closeBtn.addEventListener("click", () => chatController.endCall());
+
+      // Update dot and waiting screen when connected
+      const origUpdateCallStatus = updateCallStatus;
+      window.__callStatusUpdater = (msg) => {
+        if (callStatusEl) callStatusEl.textContent = msg;
+        if (msg.includes("🟢")) {
+          callDot.style.background = "#68d391";
+          callHeaderName.textContent = peerName;
+          callWaiting.style.display = "none";
+        }
+      };
+    }
+
+    function hideCallWindow() {
+      if (callWindow) {
+        try { callWindow.remove(); } catch (e) {}
+        callWindow = null;
+        remoteVideoEl = null;
+        localVideoEl = null;
+        callStatusEl = null;
+        window.__callStatusUpdater = null;
+      }
+    }
+
+    function setRemoteStream(stream) {
+      if (remoteVideoEl) {
+        remoteVideoEl.srcObject = stream;
+        const waiting = callWindow && callWindow.querySelector("#callWaiting");
+        if (waiting) waiting.style.display = "none";
+      }
+    }
+
+    function updateCallStatus(msg) {
+      if (window.__callStatusUpdater) window.__callStatusUpdater(msg);
+    }
+
+    // Make chat box resizable too
+    makeResizable(box, 300, 400);
 
     // Wire up send
     box.querySelector("#chatSend").onclick = async () => {
