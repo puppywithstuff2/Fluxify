@@ -464,9 +464,9 @@
     });
 
     box.innerHTML = `
-      <div id="chatHeader" style="padding:12px; background:linear-gradient(180deg,#111214,#17181b); font-weight:600; text-align:center; position:relative; font-size:15px; display:flex; align-items:center; justify-content:center; gap:10px; flex-shrink:0;">
+      <div id="chatHeader" style="padding:12px; background:linear-gradient(180deg,#111214,#17181b); font-weight:600; text-align:center; position:relative; font-size:15px; display:flex; align-items:center;">
         <div style="display:flex; gap:8px; align-items:center; position:absolute; left:12px;">
-          <button id="minifyChat" title="Minify" style="background:transparent; border:none; color:#bfc7ff; padding:8px; border-radius:8px; cursor:pointer; font-size:18px; min-width:44px; min-height:44px;">_</button>
+          <button id="minifyChat" title="Minify" style="background:transparent; border:none; color:#bfc7ff; padding:8px; border-radius:8px; cursor:pointer; font-size:18px; min-width:44px; min-height:44px;">−</button>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
           <div style="font-weight:700; color:#e6eefc;">Friends Chat</div>
@@ -485,9 +485,9 @@
         <div id="currentRoomDisplay" style="font-size:13px; opacity:0.9; color:#ddd; margin-left:auto;">room: ${currentRoom}</div>
       </div>
 
-      <div id="chatMessages" style="flex:1; padding:12px; overflow-y:auto; background:linear-gradient(180deg,#0f1113,#141518); display:flex; flex-direction:column; gap:8px; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; touch-action:auto; position:relative;"></div>
+      <div id="chatMessages" style="flex:1; padding:12px; overflow-y:auto; background:linear-gradient(180deg,#0f1113,#141518); display:flex; flex-direction:column; gap:8px; -webkit-overflow-scrolling:touch;"></div>
 
-      <div id="imageInputRow" style="display:none; padding:8px 10px; background:#0f1113; gap:8px; align-items:center; flex-shrink:0;">
+      <div id="imageInputRow" style="display:none; padding:8px 10px; background:#0f1113; gap:8px; align-items:center; flex-shrink:0; flex-direction:row;">
         <input id="imageUrlInput" placeholder="Paste image URL..." style="flex:1; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); outline:none; font-size:14px; background:#0c0d0f; color:#fff;">
         <button id="imageUrlSend" style="padding:8px 10px; border-radius:8px; border:none; background:#2f855a; color:white; cursor:pointer; font-size:14px; min-height:44px;">Send</button>
         <button id="imageUploadBtn" style="padding:8px 10px; border-radius:8px; border:none; background:#2b6cb0; color:white; cursor:pointer; font-size:14px; min-height:44px;">Upload</button>
@@ -630,16 +630,16 @@
         </div>
         <div style="flex:1; position:relative; background:#000; overflow:hidden;">
           <video id="remoteVideo" autoplay playsinline style="width:100%; height:100%; object-fit:cover; display:block;"></video>
-          <video id="localVideo" autoplay muted playsinline style="position:absolute; bottom:14px; right:14px; width:110px; height:82px; object-fit:cover; border-radius:10px; border:2px solid rgba(255,255,255,0.15); background:#111; box-shadow:0 4px 12px rgba(0,0,0,0.5); z-index:2;"></video>
+          <video id="localVideo" autoplay muted playsinline style="position:absolute; bottom:14px; right:14px; width:110px; height:82px; object-fit:cover; border-radius:10px; border:2px solid rgba(255,255,255,0.2);"></video>
           <div id="callWaiting" style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; color:#e6eefc;">
             <div style="font-size:52px;">👤</div>
             <div style="font-size:15px; opacity:0.7;">Waiting for ${escapeHtml(peerName)}...</div>
           </div>
         </div>
         <div style="padding:16px; background:#080909; display:flex; gap:12px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
-          <button id="callMuteBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center;">🎤</button>
-          <button id="callVideoBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center;">📷</button>
-          <button id="callEndBtn" style="width:72px; height:72px; border-radius:50%; border:none; background:#e53e3e; color:#fff; font-size:26px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(229,62,62,0.4);">📵</button>
+          <button id="callMuteBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:56px;">🎤</button>
+          <button id="callVideoBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:56px;">📷</button>
+          <button id="callEndBtn" style="width:72px; height:72px; border-radius:50%; border:none; background:#e53e3e; color:#fff; font-size:26px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:72px;">📞</button>
         </div>
       `;
 
@@ -702,8 +702,8 @@
       <div id="incomingCallerName" style="font-size:17px; font-weight:700; color:#fff; text-align:center;"></div>
       <div style="font-size:13px; color:rgba(255,255,255,0.7);">Incoming video call</div>
       <div style="display:flex; gap:16px; width:100%; justify-content:center;">
-        <button id="acceptCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#68d391; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:52px;">Accept ✓</button>
-        <button id="rejectCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#fc8181; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:52px;">Reject ✕</button>
+        <button id="acceptCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#68d391; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:44px;">Accept</button>
+        <button id="rejectCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#fc8181; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:44px;">Decline</button>
       </div>
     `;
     box.appendChild(incomingBanner);
@@ -972,7 +972,7 @@
         left.appendChild(lock);
         const btn = document.createElement("button");
         btn.textContent = r; btn.title = `Switch to ${r}`;
-        Object.assign(btn.style, { padding: "8px 10px", borderRadius: "8px", border: "none", background: r === currentRoom ? "#25393a" : "#131415", color: "#fff", cursor: "pointer", fontSize: "14px" });
+        Object.assign(btn.style, { padding: "8px 10px", borderRadius: "8px", border: "none", background: r === currentRoom ? "#25393a" : "#131415", color: "#fff", cursor: "pointer", fontSize: "14px", flex: "1" });
         btn.onclick = async () => { await switchRoom(r); hideRoomsOverlay(); };
         left.appendChild(btn);
         row.appendChild(left);
@@ -1108,7 +1108,7 @@
 
         const searchRow = document.createElement("div");
         Object.assign(searchRow.style, { padding: "10px 14px 6px", flexShrink: "0", background: "#111214" });
-        searchRow.innerHTML = `<input id="exploreSearch" placeholder="Search rooms..." style="width:100%; box-sizing:border-box; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.06); background:#0c0d0f; color:#fff; font-size:14px; outline:none; min-height:44px;">`;
+        searchRow.innerHTML = `<input id="exploreSearch" placeholder="Search rooms..." style="width:100%; box-sizing:border-box; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.04); outline:none; font-size:14px; background:#0c0d0f; color:#fff;">`;
         ex.appendChild(searchRow);
 
         const pillsRow = document.createElement("div");
@@ -1223,17 +1223,17 @@
             const claimedInfo = claimedChatsMap[r.room];
             const badge = document.createElement("div");
             if (claimedInfo && claimedInfo.claimed_by) {
-              Object.assign(badge.style, { fontSize: "11px", color: "#a0aec0", background: "rgba(255,255,255,0.04)", padding: "2px 8px", borderRadius: "999px", marginTop: "2px", display: "inline-block", width: "fit-content" });
+              Object.assign(badge.style, { fontSize: "11px", color: "#a0aec0", background: "rgba(255,255,255,0.04)", padding: "2px 8px", borderRadius: "999px", marginTop: "2px", display: "inline-block" });
               badge.textContent = `🔒 ${claimedInfo.claimed_by}`;
             } else {
-              Object.assign(badge.style, { fontSize: "11px", color: "#68d391", background: "rgba(104,211,145,0.08)", padding: "2px 8px", borderRadius: "999px", marginTop: "2px", display: "inline-block", width: "fit-content" });
+              Object.assign(badge.style, { fontSize: "11px", color: "#68d391", background: "rgba(104,211,145,0.08)", padding: "2px 8px", borderRadius: "999px", marginTop: "2px", display: "inline-block" });
               badge.textContent = "✓ Open";
             }
             info.appendChild(badge);
             card.appendChild(info);
             const joinBtn = document.createElement("button");
             joinBtn.textContent = "Join";
-            Object.assign(joinBtn.style, { padding: "10px 14px", borderRadius: "8px", border: "none", background: "#5865f2", color: "#fff", cursor: "pointer", fontSize: "13px", fontWeight: "600", flexShrink: "0", minHeight: "44px" });
+            Object.assign(joinBtn.style, { padding: "10px 14px", borderRadius: "8px", border: "none", background: "#5865f2", color: "#fff", cursor: "pointer", fontSize: "13px", fontWeight: "600", minHeight: "44px", flexShrink: "0" });
             joinBtn.addEventListener("click", async () => {
               addRoomToList(r.room);
               ex.remove();
@@ -1497,7 +1497,8 @@
           return res.json();
         },
         async sendMessage(text) {
-          if (sendWs({ type: "chat", text })) return { success: true };
+          const success = sendWs({ type: "chat", text });
+          if (success) return { success: true };
           const url = `${CHAT_BASE}/room/${encodeURIComponent(currentRoom)}/send`;
           const proof = await fetchRoomProof(token, currentRoom);
           const headers = { "Content-Type": "application/json" };
@@ -1568,7 +1569,6 @@
       if (!text) return;
       try {
         await chatController.sendMessage(text);
-        if (!sendWs) await chatController.loadMessagesOnce({ forceScroll: true });
         newMsgBtn.style.display = "none";
         refreshTimestampsIn(msgBox);
       } catch (e) { alert("Send failed: " + (e && e.message ? e.message : "unknown")); }
