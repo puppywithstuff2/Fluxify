@@ -639,7 +639,7 @@
         <div style="padding:16px; background:#080909; display:flex; gap:12px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
           <button id="callMuteBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:56px;">🎤</button>
           <button id="callVideoBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:56px;">📷</button>
-          <button id="callEndBtn" style="width:72px; height:72px; border-radius:50%; border:none; background:#e53e3e; color:#fff; font-size:26px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:72px;">📞</button>
+          <button id="callEndBtn" style="width:72px; height:72px; border-radius:50%; border:none; background:#e53e3e; color:#fff; font-size:26px; cursor:pointer; display:flex; alignItems:center; justifyContent:center; minHeight:72px;">📞</button>
         </div>
       `;
 
@@ -854,6 +854,7 @@
       if (box._timeUpdater) { clearInterval(box._timeUpdater); box._timeUpdater = null; }
       if (minIcon) { removeEl(minIcon); minIcon = null; }
       hideCallWindow();
++      try { delete window.sendWs; } catch (e) {}
       removeEl(box);
     };
 
@@ -1550,7 +1551,8 @@
         resume() {
           wsPaused = false; wsActive = true; connectWs();
           pollTimer = setTimeout(slowPoll, SLOW_POLL_MS);
-        }
+        },
++       rawSend(data) { return sendWs(data); }
       };
       return ctrl;
     }
@@ -1559,6 +1561,15 @@
     let chatController = makeWsController();
     box._chatController = chatController;
     await chatController.start();
++
++    // Expose a small shim for legacy callers that may reference a global `sendWs`.
++    // This forwards to the controller's rawSend (which uses the live WebSocket if open).
++    try {
++      window.sendWs = (data) => {
++        try { return box._chatController && typeof box._chatController.rawSend === 'function' ? box._chatController.rawSend(data) : false; }
++        catch (e) { return false; }
++      };
++    } catch (e) {}
 
     const TIMESTAMP_REFRESH_MS = 30 * 1000;
     box._timeUpdater = setInterval(() => refreshTimestampsIn(msgBox), TIMESTAMP_REFRESH_MS);
@@ -1672,6 +1683,7 @@
       const trimmed = newRoomName.trim();
       if (trimmed === currentRoom) { currentRoomDisplay.textContent = `room: ${currentRoom}`; return; }
       chatController.stop();
++      try { delete window.sendWs; } catch (e) {}
       if (box._timeUpdater) { clearInterval(box._timeUpdater); box._timeUpdater = null; }
       msgBox.innerHTML = ""; msgBox.appendChild(newMsgBtn);
       currentRoom = trimmed;
@@ -1681,6 +1693,12 @@
       chatController = makeWsController();
       box._chatController = chatController;
       await chatController.start();
++      try {
++        window.sendWs = (data) => {
++          try { return box._chatController && typeof box._chatController.rawSend === 'function' ? box._chatController.rawSend(data) : false; }
++          catch (e) { return false; }
++        };
++      } catch (e) {}
       box._timeUpdater = setInterval(() => refreshTimestampsIn(msgBox), TIMESTAMP_REFRESH_MS);
       refreshTimestampsIn(msgBox);
     }
@@ -1708,6 +1726,7 @@
         if (box._chatController) try { box._chatController.stop(); } catch (e) {}
         if (box._timeUpdater) { clearInterval(box._timeUpdater); box._timeUpdater = null; }
         if (minIcon && !document.body.contains(minIcon)) minIcon = null;
++        try { delete window.sendWs; } catch (e) {}
         observer.disconnect();
       }
     });
