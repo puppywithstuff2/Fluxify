@@ -466,7 +466,7 @@
     box.innerHTML = `
       <div id="chatHeader" style="padding:12px; background:linear-gradient(180deg,#111214,#17181b); font-weight:600; text-align:center; position:relative; font-size:15px; display:flex; align-items:center;">
         <div style="display:flex; gap:8px; align-items:center; position:absolute; left:12px;">
-          <button id="minifyChat" title="Minify" style="background:transparent; border:none; color:#bfc7ff; padding:8px; border-radius:8px; cursor:pointer; font-size:18px; min-width:44px; min-height:44px;">−</button>
+          <button id="minifyChat" title="Minify" style="background:transparent; border:none; color:#bfc7ff; padding:8px; border-radius:8px; cursor:pointer; font-size:18px; min-width:44px; min-height:44px;">_</button>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
           <div style="font-weight:700; color:#e6eefc;">Friends Chat</div>
@@ -639,7 +639,7 @@
         <div style="padding:16px; background:#080909; display:flex; gap:12px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
           <button id="callMuteBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:56px;">🎤</button>
           <button id="callVideoBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:56px;">📷</button>
-          <button id="callEndBtn" style="width:72px; height:72px; border-radius:50%; border:none; background:#e53e3e; color:#fff; font-size:26px; cursor:pointer; display:flex; alignItems:center; justifyContent:center; minHeight:72px;">📞</button>
+          <button id="callEndBtn" style="width:72px; height:72px; border-radius:50%; border:none; background:#e53e3e; color:#fff; font-size:26px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:72px;">📞</button>
         </div>
       `;
 
@@ -703,7 +703,7 @@
       <div style="font-size:13px; color:rgba(255,255,255,0.7);">Incoming video call</div>
       <div style="display:flex; gap:16px; width:100%; justify-content:center;">
         <button id="acceptCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#68d391; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:44px;">Accept</button>
-        <button id="rejectCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#fc8181; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:44px;">Decline</button>
+        <button id="rejectCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#fc8181; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:44px;">Reject</button>
       </div>
     `;
     box.appendChild(incomingBanner);
@@ -854,7 +854,6 @@
       if (box._timeUpdater) { clearInterval(box._timeUpdater); box._timeUpdater = null; }
       if (minIcon) { removeEl(minIcon); minIcon = null; }
       hideCallWindow();
-+      try { delete window.sendWs; } catch (e) {}
       removeEl(box);
     };
 
@@ -973,7 +972,7 @@
         left.appendChild(lock);
         const btn = document.createElement("button");
         btn.textContent = r; btn.title = `Switch to ${r}`;
-        Object.assign(btn.style, { padding: "8px 10px", borderRadius: "8px", border: "none", background: r === currentRoom ? "#25393a" : "#131415", color: "#fff", cursor: "pointer", fontSize: "14px", flex: "1" });
+        Object.assign(btn.style, { padding: "8px 10px", borderRadius: "8px", border: "none", background: r === currentRoom ? "#25393a" : "#131415", color: "#fff", cursor: "pointer", fontSize: "14px", flex: "1", minHeight: "44px" });
         btn.onclick = async () => { await switchRoom(r); hideRoomsOverlay(); };
         left.appendChild(btn);
         row.appendChild(left);
@@ -983,7 +982,7 @@
         if (!claimedInfo || !claimedInfo.claimed_by) {
           const claimBtn = document.createElement("button");
           claimBtn.textContent = "Claim";
-          Object.assign(claimBtn.style, { padding: "6px 8px", borderRadius: "8px", border: "none", background: "#2f855a", color: "#fff", cursor: "pointer", fontSize: "12px" });
+          Object.assign(claimBtn.style, { padding: "6px 8px", borderRadius: "8px", border: "none", background: "#2f855a", color: "#fff", cursor: "pointer", fontSize: "12px", minHeight: "44px" });
           claimBtn.onclick = async () => {
             const ans = await promptPasswordForRoom(r, "claim");
             if (!ans || !ans.password) return alert("Claim canceled (no password)");
@@ -1001,16 +1000,16 @@
           if (owner === username) {
             const manageBtn = document.createElement("button");
             manageBtn.textContent = "Manage";
-            Object.assign(manageBtn.style, { padding: "6px 8px", borderRadius: "8px", border: "none", background: "#5865f2", color: "#fff", cursor: "pointer", fontSize: "12px" });
+            Object.assign(manageBtn.style, { padding: "6px 8px", borderRadius: "8px", border: "none", background: "#5865f2", color: "#fff", cursor: "pointer", fontSize: "12px", minHeight: "44px" });
             manageBtn.onclick = () => {
               const menu = document.createElement("div");
               Object.assign(menu.style, { position: "absolute", background: "#111", padding: "8px", borderRadius: "8px", right: "20px", zIndex: 99999, display: "flex", gap: "6px" });
               const change = document.createElement("button");
               change.textContent = "Change pwd";
-              Object.assign(change.style, { padding: "6px 8px", borderRadius: "8px", border: "none", background: "#2f855a", color: "#fff", cursor: "pointer", fontSize: "12px" });
+              Object.assign(change.style, { padding: "6px 8px", borderRadius: "8px", border: "none", background: "#2f855a", color: "#fff", cursor: "pointer", fontSize: "12px", minHeight: "44px" });
               const unclaim = document.createElement("button");
               unclaim.textContent = "Unclaim";
-              Object.assign(unclaim.style, { padding: "6px 8px", borderRadius: "8px", border: "none", background: "#a33", color: "#fff", cursor: "pointer", fontSize: "12px" });
+              Object.assign(unclaim.style, { padding: "6px 8px", borderRadius: "8px", border: "none", background: "#a33", color: "#fff", cursor: "pointer", fontSize: "12px", minHeight: "44px" });
               menu.appendChild(change); menu.appendChild(unclaim);
               row.appendChild(menu);
               function cleanupMenu() { try { menu.remove(); } catch (e) {} }
@@ -1043,7 +1042,7 @@
         }
         const del = document.createElement("button");
         del.textContent = "Remove";
-        Object.assign(del.style, { padding: "6px 8px", borderRadius: "8px", border: "none", background: "#666", color: "#fff", cursor: "pointer", fontSize: "12px" });
+        Object.assign(del.style, { padding: "6px 8px", borderRadius: "8px", border: "none", background: "#666", color: "#fff", cursor: "pointer", fontSize: "12px", minHeight: "44px" });
         del.onclick = () => { if (confirm(`Remove "${r}" from your library?`)) { removeRoomFromList(r); renderRoomsList(); } };
         actions.appendChild(del);
         row.appendChild(actions);
@@ -1234,7 +1233,7 @@
             card.appendChild(info);
             const joinBtn = document.createElement("button");
             joinBtn.textContent = "Join";
-            Object.assign(joinBtn.style, { padding: "10px 14px", borderRadius: "8px", border: "none", background: "#5865f2", color: "#fff", cursor: "pointer", fontSize: "13px", fontWeight: "600", minHeight: "44px", flexShrink: "0" });
+            Object.assign(joinBtn.style, { padding: "10px 14px", borderRadius: "8px", border: "none", background: "#5865f2", color: "#fff", cursor: "pointer", fontSize: "13px", fontWeight: "600", minHeight: "44px" });
             joinBtn.addEventListener("click", async () => {
               addRoomToList(r.room);
               ex.remove();
@@ -1509,11 +1508,11 @@
           if (pwd) headers["X-Room-Password"] = pwd;
           const res = await fetchWithTimeout(url, { method: "POST", headers, body: JSON.stringify({ text }) }, 8000);
           if (res.status === 401 || res.status === 403) {
+            delete roomProofs[currentRoom];
             const ans = await promptPasswordForRoom(currentRoom, "access");
             if (!ans || !ans.password) throw new Error("Auth required");
             if (ans.remember) { const saved = await postSaveRoomPassword(token, currentRoom, ans.password); if (saved) userRoomPasswords[currentRoom] = ans.password; }
             else sessionRoomPasswords[currentRoom] = ans.password;
-            delete roomProofs[currentRoom];
             const proof2 = await fetchRoomProof(token, currentRoom);
             const headers2 = { "Content-Type": "application/json" };
             if (token) headers2.Authorization = token;
@@ -1551,8 +1550,7 @@
         resume() {
           wsPaused = false; wsActive = true; connectWs();
           pollTimer = setTimeout(slowPoll, SLOW_POLL_MS);
-        },
-+       rawSend(data) { return sendWs(data); }
+        }
       };
       return ctrl;
     }
@@ -1561,15 +1559,6 @@
     let chatController = makeWsController();
     box._chatController = chatController;
     await chatController.start();
-+
-+    // Expose a small shim for legacy callers that may reference a global `sendWs`.
-+    // This forwards to the controller's rawSend (which uses the live WebSocket if open).
-+    try {
-+      window.sendWs = (data) => {
-+        try { return box._chatController && typeof box._chatController.rawSend === 'function' ? box._chatController.rawSend(data) : false; }
-+        catch (e) { return false; }
-+      };
-+    } catch (e) {}
 
     const TIMESTAMP_REFRESH_MS = 30 * 1000;
     box._timeUpdater = setInterval(() => refreshTimestampsIn(msgBox), TIMESTAMP_REFRESH_MS);
@@ -1683,7 +1672,6 @@
       const trimmed = newRoomName.trim();
       if (trimmed === currentRoom) { currentRoomDisplay.textContent = `room: ${currentRoom}`; return; }
       chatController.stop();
-+      try { delete window.sendWs; } catch (e) {}
       if (box._timeUpdater) { clearInterval(box._timeUpdater); box._timeUpdater = null; }
       msgBox.innerHTML = ""; msgBox.appendChild(newMsgBtn);
       currentRoom = trimmed;
@@ -1693,12 +1681,6 @@
       chatController = makeWsController();
       box._chatController = chatController;
       await chatController.start();
-+      try {
-+        window.sendWs = (data) => {
-+          try { return box._chatController && typeof box._chatController.rawSend === 'function' ? box._chatController.rawSend(data) : false; }
-+          catch (e) { return false; }
-+        };
-+      } catch (e) {}
       box._timeUpdater = setInterval(() => refreshTimestampsIn(msgBox), TIMESTAMP_REFRESH_MS);
       refreshTimestampsIn(msgBox);
     }
@@ -1726,7 +1708,6 @@
         if (box._chatController) try { box._chatController.stop(); } catch (e) {}
         if (box._timeUpdater) { clearInterval(box._timeUpdater); box._timeUpdater = null; }
         if (minIcon && !document.body.contains(minIcon)) minIcon = null;
-+        try { delete window.sendWs; } catch (e) {}
         observer.disconnect();
       }
     });
