@@ -1477,15 +1477,21 @@
           _localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
           peerConnection = createPeerConnection(callPeer);
           _localStream.getTracks().forEach(t => peerConnection.addTrack(t, _localStream));
-          await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: pendingOffer }));
-          // FIX 3c: flush any ICE candidates that arrived before the offer was processed
+
+          // Must come before setRemoteDescription so remoteVideoEl exists when ontrack fires
+          showCallWindow(callPeer, _localStream);
+          minifyChat();
+
+          await peerConnection.setRemoteDescription(
+            new RTCSessionDescription({ type: "offer", sdp: pendingOffer })
+          );
           if (peerConnection._flushIce) peerConnection._flushIce();
+
           const answer = await peerConnection.createAnswer();
           await peerConnection.setLocalDescription(answer);
           sendWs({ type: "call-answer", to: callPeer, sdp: answer.sdp });
-          callState = "active"; pendingOffer = null;
-          showCallWindow(callPeer, _localStream);
-          minifyChat();
+          callState = "active";
+          pendingOffer = null;
         } catch (e) { console.error("acceptCall error", e); endCall("error"); }
       }
 
@@ -1545,7 +1551,16 @@
           }
           if (pc.iceConnectionState === "disconnected") updateCallStatus("⚠️ Reconnecting...");
         };
-        pc.ontrack = (e) => setRemoteStream(e.streams[0]);
+        pc.ontrack = (e) => {
+          if (e.streams && e.streams[0]) {
+            setRemoteStream(e.streams[0]);
+          } else {
+            // Browser sent track without a stream — build one manually
+            if (!pc._remoteStream) pc._remoteStream = new MediaStream();
+            pc._remoteStream.addTrack(e.track);
+            setRemoteStream(pc._remoteStream);
+          }
+        };
         return pc;
       }
 
