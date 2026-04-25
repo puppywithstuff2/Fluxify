@@ -592,13 +592,23 @@
       }
     }
 
+    // FIX 1: setRemoteStream now calls .play() and handles autoplay policy
     function setRemoteStream(stream) {
-      if (remoteVideoEl) {
-        remoteVideoEl.srcObject = stream;
+      if (!remoteVideoEl) return;
+      remoteVideoEl.srcObject = stream;
+      remoteVideoEl.volume = callWindow
+        ? (Number(callWindow.querySelector("#volumeSlider")?.value) || 80) / 100
+        : 0.8;
+      remoteVideoEl.play().catch(() => {
+        // Autoplay blocked — show tap-to-play button
         if (callWindow) {
-          const waiting = callWindow.querySelector("#callWaiting");
-          if (waiting) waiting.style.display = "none";
+          const unmuteBtn = callWindow.querySelector("#unmuteRemote");
+          if (unmuteBtn) unmuteBtn.style.display = "flex";
         }
+      });
+      if (callWindow) {
+        const waiting = callWindow.querySelector("#callWaiting");
+        if (waiting) waiting.style.display = "none";
       }
     }
 
@@ -606,6 +616,7 @@
       if (callWindow) { try { callWindow.remove(); } catch (e) {} callWindow = null; remoteVideoEl = null; localVideoEl = null; }
     }
 
+    // FIX 2: showCallWindow with volume slider + tap-to-play fallback + explicit .play() calls
     function showCallWindow(peerName, lStream) {
       if (callWindow) { try { callWindow.remove(); } catch (e) {} }
 
@@ -635,6 +646,14 @@
             <div style="font-size:52px;">👤</div>
             <div style="font-size:15px; opacity:0.7;">Waiting for ${escapeHtml(peerName)}...</div>
           </div>
+          <button id="unmuteRemote" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); padding:12px 20px; background:rgba(0,0,0,0.7); border:none; border-radius:12px; color:#fff; font-size:14px; cursor:pointer; align-items:center; gap:8px;">
+            🔊 Tap to hear audio
+          </button>
+        </div>
+        <div style="padding:10px 16px; background:#080909; display:flex; align-items:center; gap:10px; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
+          <span style="font-size:12px; color:#9fb0e6; white-space:nowrap;">🔊 Vol</span>
+          <input id="volumeSlider" type="range" min="0" max="100" value="80"
+            style="flex:1; accent-color:#2f855a; cursor:pointer;">
         </div>
         <div style="padding:16px; background:#080909; display:flex; gap:12px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
           <button id="callMuteBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:56px;">🎤</button>
@@ -647,8 +666,13 @@
       makeResizable(callWindow, 300, 360);
 
       remoteVideoEl = callWindow.querySelector("#remoteVideo");
-      localVideoEl = callWindow.querySelector("#localVideo");
-      if (lStream) localVideoEl.srcObject = lStream;
+      localVideoEl  = callWindow.querySelector("#localVideo");
+
+      // Play local stream immediately — muted so no echo
+      if (lStream) {
+        localVideoEl.srcObject = lStream;
+        localVideoEl.play().catch(() => {});
+      }
 
       // Drag
       const ch = callWindow.querySelector("#callHeader");
@@ -662,26 +686,41 @@
       });
       ch.addEventListener("pointermove", e => {
         if (!drag) return;
-        callWindow.style.left = Math.max(0, Math.min(window.innerWidth - callWindow.offsetWidth, e.clientX - ox)) + "px";
-        callWindow.style.top = Math.max(0, Math.min(window.innerHeight - callWindow.offsetHeight, e.clientY - oy)) + "px";
+        callWindow.style.left = Math.max(0, Math.min(window.innerWidth  - callWindow.offsetWidth,  e.clientX - ox)) + "px";
+        callWindow.style.top  = Math.max(0, Math.min(window.innerHeight - callWindow.offsetHeight, e.clientY - oy)) + "px";
         e.preventDefault();
       });
       ch.addEventListener("pointerup", () => drag = false);
 
+      // Volume slider
+      callWindow.querySelector("#volumeSlider").addEventListener("input", (e) => {
+        if (remoteVideoEl) remoteVideoEl.volume = Number(e.target.value) / 100;
+      });
+
+      // Tap-to-play button (autoplay policy fallback)
+      callWindow.querySelector("#unmuteRemote").addEventListener("click", () => {
+        if (remoteVideoEl) {
+          remoteVideoEl.play().catch(() => {});
+          callWindow.querySelector("#unmuteRemote").style.display = "none";
+        }
+      });
+
       let muted = false, vidHidden = false;
       callWindow.querySelector("#callMuteBtn").addEventListener("click", () => {
         muted = !muted;
-        if (chatController && chatController._localStream) chatController._localStream.getAudioTracks().forEach(t => t.enabled = !muted);
+        if (chatController && chatController._localStream)
+          chatController._localStream.getAudioTracks().forEach(t => t.enabled = !muted);
         callWindow.querySelector("#callMuteBtn").textContent = muted ? "🔇" : "🎤";
         callWindow.querySelector("#callMuteBtn").style.background = muted ? "#e53e3e" : "#2d3748";
       });
       callWindow.querySelector("#callVideoBtn").addEventListener("click", () => {
         vidHidden = !vidHidden;
-        if (chatController && chatController._localStream) chatController._localStream.getVideoTracks().forEach(t => t.enabled = !vidHidden);
+        if (chatController && chatController._localStream)
+          chatController._localStream.getVideoTracks().forEach(t => t.enabled = !vidHidden);
         callWindow.querySelector("#callVideoBtn").textContent = vidHidden ? "🚫" : "📷";
         callWindow.querySelector("#callVideoBtn").style.background = vidHidden ? "#e53e3e" : "#2d3748";
       });
-      callWindow.querySelector("#callEndBtn").addEventListener("click", () => chatController.endCall());
+      callWindow.querySelector("#callEndBtn").addEventListener("click",   () => chatController.endCall());
       callWindow.querySelector("#callCloseBtn").addEventListener("click", () => chatController.endCall());
     }
 
@@ -1386,16 +1425,29 @@
             callState = "incoming"; callPeer = msg._from; pendingOffer = msg.sdp;
             showIncomingCallBanner(msg._from);
             break;
+
+          // FIX 3a: flush queued ICE candidates after remote description is set
           case "call-answer":
             if (callState === "outgoing" && peerConnection) {
-              peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: msg.sdp })).catch(e => console.error(e));
+              peerConnection.setRemoteDescription(
+                new RTCSessionDescription({ type: "answer", sdp: msg.sdp })
+              ).then(() => {
+                if (peerConnection._flushIce) peerConnection._flushIce();
+              }).catch(e => console.error("setRemoteDescription (answer):", e));
             }
             break;
+
+          // FIX 3b: queue or apply ICE candidates depending on whether remote desc is set
           case "call-ice":
             if (peerConnection && msg.candidate) {
-              peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(e => console.error(e));
+              if (peerConnection._queueOrAddIce) {
+                peerConnection._queueOrAddIce(msg.candidate);
+              } else {
+                peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(e => console.error(e));
+              }
             }
             break;
+
           case "call-end":
           case "call-reject":
             endCall(msg.type === "call-reject" ? "rejected" : "ended");
@@ -1426,6 +1478,8 @@
           peerConnection = createPeerConnection(callPeer);
           _localStream.getTracks().forEach(t => peerConnection.addTrack(t, _localStream));
           await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: pendingOffer }));
+          // FIX 3c: flush any ICE candidates that arrived before the offer was processed
+          if (peerConnection._flushIce) peerConnection._flushIce();
           const answer = await peerConnection.createAnswer();
           await peerConnection.setLocalDescription(answer);
           sendWs({ type: "call-answer", to: callPeer, sdp: answer.sdp });
@@ -1449,14 +1503,46 @@
         callState = null; callPeer = null; pendingOffer = null;
         hideCallWindow();
         hideIncomingCallBanner();
+        if (wsPaused) closeWs(); // now safe to close — call is done, chat is still minified
       }
 
+      // FIX 3 (core): createPeerConnection with ICE candidate queue to prevent race condition
       function createPeerConnection(targetUsername) {
         const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-        pc.onicecandidate = (e) => { if (e.candidate) sendWs({ type: "call-ice", to: targetUsername, candidate: e.candidate }); };
+        const iceCandidateQueue = [];
+        let remoteDescSet = false;
+
+        async function flushIceCandidates() {
+          while (iceCandidateQueue.length) {
+            const c = iceCandidateQueue.shift();
+            try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (e) {}
+          }
+        }
+
+        pc._flushIce = async () => {
+          remoteDescSet = true;
+          await flushIceCandidates();
+        };
+        pc._queueOrAddIce = async (candidate) => {
+          if (!remoteDescSet) {
+            iceCandidateQueue.push(candidate);
+          } else {
+            try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
+          }
+        };
+
+        pc.onicecandidate = (e) => {
+          if (e.candidate) sendWs({ type: "call-ice", to: targetUsername, candidate: e.candidate });
+        };
         pc.oniceconnectionstatechange = () => {
-          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") { callState = "active"; updateCallStatus("🟢 Connected"); }
-          if (pc.iceConnectionState === "failed") { updateCallStatus("❌ Connection failed"); endCall("failed"); }
+          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+            callState = "active";
+            updateCallStatus("🟢 Connected");
+          }
+          if (pc.iceConnectionState === "failed") {
+            updateCallStatus("❌ Connection failed");
+            endCall("failed");
+          }
           if (pc.iceConnectionState === "disconnected") updateCallStatus("⚠️ Reconnecting...");
         };
         pc.ontrack = (e) => setRemoteStream(e.streams[0]);
@@ -1544,7 +1630,8 @@
           if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
         },
         pause() {
-          wsPaused = true; closeWs();
+          wsPaused = true;
+          if (!callState) closeWs(); // keep WS alive if a call is in progress
           if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
         },
         resume() {
