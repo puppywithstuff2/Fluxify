@@ -1352,22 +1352,34 @@
 
       async function connectWs() {
         if (!wsActive || wsPaused) return;
+
+        // Close the old socket before opening a new one.
+        // Without this, the DO holds both connections and broadcasts to all of them.
+        if (ws) {
+          try { ws.close(1000, "reconnecting"); } catch (e) {}
+          ws = null;
+        }
+
         try {
           const proof = await fetchRoomProof(token, currentRoom);
           if (!proof) { scheduleReconnect(); return; }
           const wsUrl = `${CHAT_BASE.replace("https://", "wss://").replace("http://", "ws://")}/room/${encodeURIComponent(currentRoom)}?proof=${encodeURIComponent(proof)}`;
           ws = new WebSocket(wsUrl);
-          ws.addEventListener("open", () => { wsReconnectDelay = WS_RECONNECT_BASE; updateWsIndicator(true); });
+          ws.addEventListener("open",  () => { wsReconnectDelay = WS_RECONNECT_BASE; updateWsIndicator(true); });
           ws.addEventListener("message", (evt) => {
             try {
               const msg = JSON.parse(evt.data);
-              if (msg.type === "chat") handleIncomingChatMessage(msg);
-              else if (msg.type === "presence") handlePresence(msg.users || []);
+              if (msg.type === "chat")                       handleIncomingChatMessage(msg);
+              else if (msg.type === "presence")              handlePresence(msg.users || []);
               else if (msg.type && msg.type.startsWith("call-")) handleCallSignal(msg);
             } catch (e) {}
           });
           ws.addEventListener("close", () => { updateWsIndicator(false); if (wsActive && !wsPaused) scheduleReconnect(); });
-          ws.addEventListener("error", () => { updateWsIndicator(false); try { ws.close(); } catch (e) {} if (wsActive && !wsPaused) scheduleReconnect(); });
+          ws.addEventListener("error", () => {
+            updateWsIndicator(false);
+            try { ws.close(); } catch (e) {}
+            if (wsActive && !wsPaused) scheduleReconnect();
+          });
         } catch (e) { if (wsActive && !wsPaused) scheduleReconnect(); }
       }
 
@@ -1391,7 +1403,19 @@
         renderUserList();
       }
 
+      // Tracks the last 50 message signatures to catch any duplicates that slip through
+      const recentMsgIds = new Set();
+
       function handleIncomingChatMessage(msg) {
+        // Build a signature from username + text + timestamp (rounded to 2s to handle minor clock drift)
+        const sig = `${msg.username}:${String(msg.text).slice(0, 80)}:${Math.round((msg.time || msg.ts || 0) / 2000)}`;
+        if (recentMsgIds.has(sig)) return;
+        recentMsgIds.add(sig);
+        if (recentMsgIds.size > 50) {
+          // Evict oldest entry — Set preserves insertion order
+          recentMsgIds.delete(recentMsgIds.values().next().value);
+        }
+
         const wasAtBottom = ctrl.isUserAtBottom();
         appendMessageToContainer(msgBox, msg, lastMessages.length);
         lastMessages.push(msg);
