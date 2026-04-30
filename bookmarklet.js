@@ -773,7 +773,10 @@
     userListPanel.innerHTML = `
       <div style="padding:14px 16px; background:#0d0e10; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.04);">
         <div style="font-weight:700; font-size:15px; color:#e6eefc;">📞 Call Someone</div>
-        <button id="closeUserList" style="background:#333; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:14px; min-width:44px; min-height:44px;">✕</button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button id="startGroupCallBtn" style="padding:8px 14px; border-radius:8px; border:none; background:#5865f2; color:#fff; cursor:pointer; font-size:13px; font-weight:600; min-height:44px;">Group Call</button>
+          <button id="closeUserList" style="background:#333; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:14px; min-width:44px; min-height:44px;">✕</button>
+        </div>
       </div>
       <div id="userListInner" style="padding:12px; display:flex; flex-direction:column; gap:10px; overflow-y:auto; max-height:280px; -webkit-overflow-scrolling:touch;"></div>
       <div id="userListEmpty" style="padding:20px; text-align:center; font-size:14px; color:#9fb0e6; opacity:0.8; display:none;">No other users online right now.</div>
@@ -843,6 +846,10 @@
       setTimeout(() => { if (!userListVisible) userListPanel.style.display = "none"; }, 260);
     }
     userListPanel.querySelector("#closeUserList").addEventListener("click", hideUserList);
+    userListPanel.querySelector("#startGroupCallBtn").addEventListener("click", () => {
+      hideUserList();
+      chatController.startGroupCall();
+    });
 
     callBtn.addEventListener("click", () => {
       if (userListVisible) hideUserList(); else showUserList();
@@ -1321,6 +1328,150 @@
       return null;
     }
 
+    // --- Group Call Window & Tile Management ---
+    let groupCallWindow = null;
+
+    function createVideoTile(peerId, label, muted = false) {
+      const tile = document.createElement("div");
+      tile.id = "tile-" + peerId;
+      if (peerId !== "local") tile.dataset.peer = peerId;
+      Object.assign(tile.style, {
+        position: "relative", background: "#111", borderRadius: "8px",
+        overflow: "hidden", minHeight: "80px",
+      });
+      const vid = document.createElement("video");
+      vid.autoplay = true; vid.playsInline = true;
+      if (muted) vid.muted = true;
+      Object.assign(vid.style, { width: "100%", height: "100%", objectFit: "cover", display: "block" });
+      tile.appendChild(vid);
+      const nameTag = document.createElement("div");
+      Object.assign(nameTag.style, {
+        position: "absolute", bottom: "6px", left: "8px",
+        background: "rgba(0,0,0,0.55)", color: "#fff",
+        fontSize: "11px", padding: "2px 7px", borderRadius: "4px",
+        pointerEvents: "none",
+      });
+      nameTag.textContent = label;
+      tile.appendChild(nameTag);
+      return tile;
+    }
+
+    function updateGridLayout() {
+      if (!groupCallWindow) return;
+      const grid = groupCallWindow.querySelector("#gcVideoGrid");
+      if (!grid) return;
+      const n = grid.children.length;
+      const cols = n <= 1 ? 1 : n <= 2 ? 2 : n <= 4 ? 2 : 3;
+      grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      const countEl = groupCallWindow.querySelector("#gcCount");
+      if (countEl) countEl.textContent = `${n} participant${n !== 1 ? "s" : ""}`;
+    }
+
+    function addLocalTile() {
+      if (!groupCallWindow) return;
+      const grid = groupCallWindow.querySelector("#gcVideoGrid");
+      if (grid.querySelector("#tile-local")) return;
+      const tile = createVideoTile("local", username + " (you)", true);
+      grid.appendChild(tile);
+      const vid = tile.querySelector("video");
+      if (chatController && chatController._localStream) {
+        vid.srcObject = chatController._localStream;
+        vid.play().catch(() => {});
+      }
+      updateGridLayout();
+    }
+
+    function addPeerTile(peerName, stream) {
+      if (!groupCallWindow) return null;
+      removePeerTile(peerName);
+      const grid = groupCallWindow.querySelector("#gcVideoGrid");
+      const tile = createVideoTile(peerName, peerName, false);
+      if (stream) {
+        const vid = tile.querySelector("video");
+        vid.srcObject = stream;
+        vid.play().catch(() => {});
+      }
+      grid.appendChild(tile);
+      updateGridLayout();
+      return tile.querySelector("video");
+    }
+
+    function removePeerTile(peerName) {
+      if (!groupCallWindow) return;
+      const grid = groupCallWindow.querySelector("#gcVideoGrid");
+      const el = grid.querySelector(`[data-peer="${CSS.escape(peerName)}"]`);
+      if (el) el.remove();
+      updateGridLayout();
+    }
+
+    function showGroupCallWindow() {
+      if (groupCallWindow) { try { groupCallWindow.remove(); } catch (e) {} }
+      groupCallWindow = document.createElement("div");
+      Object.assign(groupCallWindow.style, {
+        position: "fixed", top: "20px", left: "20px",
+        width: "min(96vw, 620px)", height: "min(90vh, 520px)",
+        background: "#0d0e10", borderRadius: "16px", zIndex: 1000001,
+        display: "flex", flexDirection: "column", overflow: "hidden",
+        boxShadow: "0 16px 48px rgba(0,0,0,0.7)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        fontFamily: "Inter, Arial, sans-serif",
+      });
+      groupCallWindow.innerHTML = `
+        <div id="gcHeader" style="padding:12px 16px; background:#080909; display:flex; align-items:center; gap:10px; cursor:grab; user-select:none; flex-shrink:0;">
+          <div style="width:8px; height:8px; border-radius:50%; background:#68d391; flex-shrink:0;"></div>
+          <div style="font-weight:700; font-size:14px; color:#e6eefc; flex:1;">Group Call</div>
+          <div id="gcCount" style="font-size:12px; color:#9fb0e6; opacity:0.8;">1 participant</div>
+          <button id="gcClose" style="background:#333; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:13px; min-width:44px; min-height:44px; margin-left:8px;">✕</button>
+        </div>
+        <div id="gcVideoGrid" style="flex:1; display:grid; gap:4px; padding:4px; background:#000; overflow:hidden;"></div>
+        <div style="padding:14px 16px; background:#080909; display:flex; gap:12px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
+          <button id="gcMute"  style="width:52px; height:52px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center;">🎤</button>
+          <button id="gcVid"   style="width:52px; height:52px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center;">📷</button>
+          <button id="gcLeave" style="width:64px; height:64px; border-radius:50%; border:none; background:#e53e3e; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center;">📞</button>
+        </div>
+      `;
+      document.body.appendChild(groupCallWindow);
+      makeResizable(groupCallWindow, 320, 280);
+
+      // Drag
+      const gh = groupCallWindow.querySelector("#gcHeader");
+      let drag = false, ox = 0, oy = 0;
+      gh.addEventListener("pointerdown", e => {
+        if (e.target.tagName === "BUTTON") return;
+        drag = true;
+        ox = e.clientX - groupCallWindow.getBoundingClientRect().left;
+        oy = e.clientY - groupCallWindow.getBoundingClientRect().top;
+        gh.setPointerCapture(e.pointerId);
+      });
+      gh.addEventListener("pointermove", e => {
+        if (!drag) return;
+        groupCallWindow.style.left = Math.max(0, Math.min(window.innerWidth  - groupCallWindow.offsetWidth,  e.clientX - ox)) + "px";
+        groupCallWindow.style.top  = Math.max(0, Math.min(window.innerHeight - groupCallWindow.offsetHeight, e.clientY - oy)) + "px";
+        e.preventDefault();
+      });
+      gh.addEventListener("pointerup", () => drag = false);
+
+      let muted = false, vidOff = false;
+      groupCallWindow.querySelector("#gcMute").addEventListener("click", () => {
+        muted = !muted;
+        if (chatController._localStream) chatController._localStream.getAudioTracks().forEach(t => t.enabled = !muted);
+        const b = groupCallWindow.querySelector("#gcMute");
+        b.textContent = muted ? "🔇" : "🎤";
+        b.style.background = muted ? "#e53e3e" : "#2d3748";
+      });
+      groupCallWindow.querySelector("#gcVid").addEventListener("click", () => {
+        vidOff = !vidOff;
+        if (chatController._localStream) chatController._localStream.getVideoTracks().forEach(t => t.enabled = !vidOff);
+        const b = groupCallWindow.querySelector("#gcVid");
+        b.textContent = vidOff ? "🚫" : "📷";
+        b.style.background = vidOff ? "#e53e3e" : "#2d3748";
+      });
+      groupCallWindow.querySelector("#gcLeave").addEventListener("click", () => chatController.leaveGroupCall());
+      groupCallWindow.querySelector("#gcClose").addEventListener("click",  () => chatController.leaveGroupCall());
+
+      addLocalTile();
+    }
+
     // --- WebSocket + Chat Controller ---
     function makeWsController() {
       const SLOW_POLL_MS = 30000;
@@ -1341,6 +1492,8 @@
       let peerConnection = null;
       let _localStream = null;
       let pendingOffer = null;
+      let isGroupCall = false;
+      let groupPeers  = new Map(); // username → { pc, stream, videoEl }
 
       const ICE_SERVERS = [
         { urls: "stun:stun.relay.metered.ca:80" },
@@ -1445,36 +1598,63 @@
       function handleCallSignal(msg) {
         switch (msg.type) {
           case "call-offer":
+            if (isGroupCall) { handleGroupOffer(msg._from, msg.sdp); return; }
             if (callState) return;
             callState = "incoming"; callPeer = msg._from; pendingOffer = msg.sdp;
             showIncomingCallBanner(msg._from);
             break;
 
-          // FIX 3a: flush queued ICE candidates after remote description is set
           case "call-answer":
+            if (isGroupCall) {
+              const pd = groupPeers.get(msg._from);
+              if (pd && pd.pc) pd.pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: msg.sdp }))
+                .then(() => { if (pd.pc._flushIce) pd.pc._flushIce(); })
+                .catch(e => console.error("group answer:", e));
+              return;
+            }
             if (callState === "outgoing" && peerConnection) {
-              peerConnection.setRemoteDescription(
-                new RTCSessionDescription({ type: "answer", sdp: msg.sdp })
-              ).then(() => {
-                if (peerConnection._flushIce) peerConnection._flushIce();
-              }).catch(e => console.error("setRemoteDescription (answer):", e));
+              peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: msg.sdp }))
+                .then(() => { if (peerConnection._flushIce) peerConnection._flushIce(); })
+                .catch(e => console.error("setRemoteDescription (answer):", e));
             }
             break;
 
-          // FIX 3b: queue or apply ICE candidates depending on whether remote desc is set
           case "call-ice":
-            if (peerConnection && msg.candidate) {
-              if (peerConnection._queueOrAddIce) {
-                peerConnection._queueOrAddIce(msg.candidate);
-              } else {
-                peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(e => console.error(e));
+            if (isGroupCall) {
+              const pd = groupPeers.get(msg._from);
+              if (pd && pd.pc && msg.candidate) {
+                if (pd.pc._queueOrAddIce) pd.pc._queueOrAddIce(msg.candidate);
+                else pd.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(() => {});
               }
+              return;
+            }
+            if (peerConnection && msg.candidate) {
+              if (peerConnection._queueOrAddIce) peerConnection._queueOrAddIce(msg.candidate);
+              else peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(e => console.error(e));
             }
             break;
 
           case "call-end":
           case "call-reject":
+            if (isGroupCall) { handleGroupPeerLeft(msg._from); return; }
             endCall(msg.type === "call-reject" ? "rejected" : "ended");
+            break;
+
+          case "call-group-invite":
+            if (callState) return;
+            isGroupCall = true;
+            callPeer = msg._from;
+            showIncomingCallBanner(msg._from + " (group call)");
+            break;
+
+          case "call-group-join":
+            if (!isGroupCall || !callState) return;
+            if (msg._from === username) return;
+            handleNewGroupMember(msg._from);
+            break;
+
+          case "call-group-leave":
+            if (isGroupCall) handleGroupPeerLeft(msg._from);
             break;
         }
       }
@@ -1494,7 +1674,7 @@
         } catch (e) { console.error("startCall error", e); endCall("error"); }
       }
 
-      async function acceptCall() {
+      async function acceptCall_1to1() {
         if (callState !== "incoming" || !pendingOffer) return;
         hideIncomingCallBanner();
         try {
@@ -1536,7 +1716,92 @@
         if (wsPaused) closeWs(); // now safe to close — call is done, chat is still minified
       }
 
-      // FIX 3 (core): createPeerConnection with ICE candidate queue to prevent race condition
+      // --- Group call helpers ---
+      function shouldOffer(myUser, theirUser) {
+        return myUser < theirUser; // consistent on both sides — prevents offer collision
+      }
+
+      async function startGroupCall() {
+        if (callState) { alert("Already in a call"); return; }
+        try {
+          isGroupCall = true; callState = "active-group";
+          _localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          showGroupCallWindow();
+          minifyChat();
+          sendWs({ type: "call-group-invite" });
+        } catch (e) {
+          alert("Could not start group call: " + (e && e.message ? e.message : "check camera/mic"));
+          callState = null; isGroupCall = false;
+        }
+      }
+
+      async function acceptGroupCall() {
+        hideIncomingCallBanner();
+        try {
+          isGroupCall = true; callState = "active-group";
+          _localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          showGroupCallWindow();
+          minifyChat();
+          sendWs({ type: "call-group-join" }); // everyone in the call hears this and connects
+        } catch (e) {
+          alert("Could not join group call: " + (e && e.message ? e.message : "check camera/mic"));
+          callState = null; isGroupCall = false;
+        }
+      }
+
+      async function handleNewGroupMember(peerName) {
+        if (groupPeers.has(peerName)) return;
+        groupPeers.set(peerName, { pc: null, stream: null, videoEl: null });
+        if (shouldOffer(username, peerName)) {
+          const pc = createPeerConnection(peerName);
+          groupPeers.get(peerName).pc = pc;
+          if (_localStream) _localStream.getTracks().forEach(t => pc.addTrack(t, _localStream));
+          try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            sendWs({ type: "call-offer", to: peerName, sdp: offer.sdp });
+          } catch (e) { console.error("group offer error:", e); }
+        }
+        // else: wait — the other side will offer us (they apply the same rule)
+      }
+
+      async function handleGroupOffer(peerName, sdp) {
+        if (!isGroupCall || !callState) return;
+        let pd = groupPeers.get(peerName);
+        if (!pd) { pd = { pc: null, stream: null, videoEl: null }; groupPeers.set(peerName, pd); }
+        const pc = createPeerConnection(peerName);
+        pd.pc = pc;
+        if (_localStream) _localStream.getTracks().forEach(t => pc.addTrack(t, _localStream));
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp }));
+          if (pc._flushIce) pc._flushIce();
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          sendWs({ type: "call-answer", to: peerName, sdp: answer.sdp });
+        } catch (e) { console.error("handleGroupOffer error:", e); }
+      }
+
+      function handleGroupPeerLeft(peerName) {
+        const pd = groupPeers.get(peerName);
+        if (pd && pd.pc) { try { pd.pc.close(); } catch (e) {} }
+        groupPeers.delete(peerName);
+        removePeerTile(peerName);
+      }
+
+      function leaveGroupCall() {
+        sendWs({ type: "call-group-leave" });
+        for (const [, pd] of groupPeers) {
+          if (pd.pc) { try { pd.pc.close(); } catch (e) {} }
+        }
+        groupPeers.clear();
+        if (_localStream) { _localStream.getTracks().forEach(t => t.stop()); _localStream = null; }
+        callState = null; isGroupCall = false; callPeer = null; pendingOffer = null;
+        if (groupCallWindow) { try { groupCallWindow.remove(); } catch (e) {} groupCallWindow = null; }
+        hideIncomingCallBanner();
+        if (wsPaused) closeWs();
+      }
+
+      // FIX 3 (core): createPeerConnection with ICE candidate queue + group call routing
       function createPeerConnection(targetUsername) {
         const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
         const iceCandidateQueue = [];
@@ -1549,40 +1814,38 @@
           }
         }
 
-        pc._flushIce = async () => {
-          remoteDescSet = true;
-          await flushIceCandidates();
-        };
+        pc._flushIce = async () => { remoteDescSet = true; await flushIceCandidates(); };
         pc._queueOrAddIce = async (candidate) => {
-          if (!remoteDescSet) {
-            iceCandidateQueue.push(candidate);
-          } else {
-            try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
-          }
+          if (!remoteDescSet) iceCandidateQueue.push(candidate);
+          else { try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {} }
         };
 
         pc.onicecandidate = (e) => {
           if (e.candidate) sendWs({ type: "call-ice", to: targetUsername, candidate: e.candidate });
         };
         pc.oniceconnectionstatechange = () => {
-          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
-            callState = "active";
-            updateCallStatus("🟢 Connected");
+          const s = pc.iceConnectionState;
+          if (!isGroupCall) {
+            if (s === "connected" || s === "completed") { callState = "active"; updateCallStatus("🟢 Connected"); }
+            if (s === "failed")       { updateCallStatus("❌ Connection failed"); endCall("failed"); }
+            if (s === "disconnected") updateCallStatus("⚠️ Reconnecting...");
           }
-          if (pc.iceConnectionState === "failed") {
-            updateCallStatus("❌ Connection failed");
-            endCall("failed");
-          }
-          if (pc.iceConnectionState === "disconnected") updateCallStatus("⚠️ Reconnecting...");
         };
         pc.ontrack = (e) => {
-          if (e.streams && e.streams[0]) {
-            setRemoteStream(e.streams[0]);
-          } else {
-            // Browser sent track without a stream — build one manually
+          const stream = (e.streams && e.streams[0]) ? e.streams[0] : (() => {
             if (!pc._remoteStream) pc._remoteStream = new MediaStream();
             pc._remoteStream.addTrack(e.track);
-            setRemoteStream(pc._remoteStream);
+            return pc._remoteStream;
+          })();
+          if (isGroupCall) {
+            const pd = groupPeers.get(targetUsername);
+            if (pd) {
+              pd.stream = stream;
+              if (pd.videoEl) { pd.videoEl.srcObject = stream; pd.videoEl.play().catch(() => {}); }
+              else { pd.videoEl = addPeerTile(targetUsername, stream); }
+            }
+          } else {
+            setRemoteStream(stream);
           }
         };
         return pc;
@@ -1591,7 +1854,9 @@
       const ctrl = {
         get currentUsers() { return currentUsers; },
         get _localStream() { return _localStream; },
-        startCall, acceptCall, rejectCall, endCall,
+        startCall,
+        acceptCall() { if (isGroupCall) acceptGroupCall(); else acceptCall_1to1(); },
+        rejectCall, endCall, startGroupCall, leaveGroupCall,
         isUserAtBottom() {
           return (msgBox.scrollHeight - (msgBox.scrollTop + msgBox.clientHeight)) < 80;
         },
