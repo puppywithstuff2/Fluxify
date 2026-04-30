@@ -1,4 +1,4 @@
-(function() {
+  (function() {
 (async () => {
   const CHAT_BASE = "https://dolegpt2.anonymousguy.workers.dev";
   const ACCOUNT_BASE = "https://account-worker.anonymousguy.workers.dev";
@@ -787,28 +787,78 @@
       const inner = userListPanel.querySelector("#userListInner");
       const empty = userListPanel.querySelector("#userListEmpty");
       const users = chatController ? chatController.currentUsers : [];
+      const activeGroupCallMembers = chatController ? chatController.activeGroupCallMembers : null;
       inner.innerHTML = "";
+
+      // ── Active group call banner ──────────────────────────────────────────
+      if (activeGroupCallMembers && activeGroupCallMembers.size > 0 && !chatController.callState) {
+        const banner = document.createElement("div");
+        Object.assign(banner.style, {
+          display: "flex", flexDirection: "column", gap: "8px",
+          padding: "12px", borderRadius: "10px",
+          background: "linear-gradient(135deg, rgba(88,101,242,0.18), rgba(47,133,90,0.14))",
+          border: "1px solid rgba(88,101,242,0.35)",
+          marginBottom: "4px",
+        });
+        const memberList = [...activeGroupCallMembers].slice(0, 4).join(", ")
+          + (activeGroupCallMembers.size > 4 ? ` +${activeGroupCallMembers.size - 4} more` : "");
+        banner.innerHTML = `
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div style="width:8px; height:8px; border-radius:50%; background:#68d391; animation:pulse 1.5s infinite;"></div>
+            <div style="font-weight:700; font-size:14px; color:#e6eefc;">Group call in progress</div>
+          </div>
+          <div style="font-size:12px; color:#9fb0e6;">${memberList}</div>
+        `;
+        const joinBtn = document.createElement("button");
+        Object.assign(joinBtn.style, {
+          padding: "12px", borderRadius: "10px", border: "none",
+          background: "#5865f2", color: "#fff", cursor: "pointer",
+          fontSize: "14px", fontWeight: "700", minHeight: "44px",
+        });
+        joinBtn.textContent = "Join group call";
+        joinBtn.addEventListener("click", () => {
+          hideUserList();
+          chatController.acceptGroupCall();
+        });
+        banner.appendChild(joinBtn);
+
+        // Pulse animation
+        if (!document.querySelector("#gcPulseStyle")) {
+          const st = document.createElement("style");
+          st.id = "gcPulseStyle";
+          st.textContent = `@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.4)} }`;
+          document.head.appendChild(st);
+        }
+
+        inner.appendChild(banner);
+      }
+
+      // ── Individual call buttons ───────────────────────────────────────────
       if (!users || users.length === 0) {
-        inner.style.display = "none";
-        empty.style.display = "block";
+        if (inner.children.length === 0) {
+          inner.style.display = "none";
+          empty.style.display = "block";
+        } else {
+          inner.style.display = "flex";
+          empty.style.display = "none";
+        }
         return;
       }
       inner.style.display = "flex";
       empty.style.display = "none";
+
       for (const u of users) {
         const row = document.createElement("div");
         Object.assign(row.style, {
-          display: "flex", alignItems: "center", gap: "12px",
-          padding: "12px", borderRadius: "10px",
-          background: "rgba(255,255,255,0.03)",
+          display: "flex", alignItems: "center", gap: "12px", padding: "12px",
+          borderRadius: "10px", background: "rgba(255,255,255,0.03)",
           border: "1px solid rgba(255,255,255,0.04)",
         });
         const avatar = document.createElement("div");
         Object.assign(avatar.style, {
-          width: "40px", height: "40px", borderRadius: "50%",
-          background: "#5865f2", display: "flex", alignItems: "center",
-          justifyContent: "center", fontSize: "18px", fontWeight: "700",
-          color: "#fff", flexShrink: "0",
+          width: "40px", height: "40px", borderRadius: "50%", background: "#5865f2",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "18px", fontWeight: "700", color: "#fff", flexShrink: "0",
         });
         avatar.textContent = u.charAt(0).toUpperCase();
         row.appendChild(avatar);
@@ -1336,20 +1386,39 @@
       tile.id = "tile-" + peerId;
       if (peerId !== "local") tile.dataset.peer = peerId;
       Object.assign(tile.style, {
-        position: "relative", background: "#111", borderRadius: "8px",
-        overflow: "hidden", minHeight: "80px",
+        position: "relative", background: "#1a1b1e", borderRadius: "6px",
+        overflow: "hidden", minHeight: "0", // critical for grid fill
       });
       const vid = document.createElement("video");
       vid.autoplay = true; vid.playsInline = true;
       if (muted) vid.muted = true;
-      Object.assign(vid.style, { width: "100%", height: "100%", objectFit: "cover", display: "block" });
+      Object.assign(vid.style, {
+        position: "absolute", inset: "0",
+        width: "100%", height: "100%",
+        objectFit: "cover", display: "block", background: "#000",
+      });
       tile.appendChild(vid);
+
+      // Avatar placeholder shown while video is loading/off
+      const avatarEl = document.createElement("div");
+      Object.assign(avatarEl.style, {
+        position: "absolute", inset: "0",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "#1a1b1e", fontSize: "32px", color: "#555", zIndex: 1,
+      });
+      avatarEl.textContent = label.charAt(0).toUpperCase();
+      avatarEl.id = "avatar-" + peerId;
+      tile.appendChild(avatarEl);
+
+      vid.addEventListener("play",    () => { avatarEl.style.display = "none"; });
+      vid.addEventListener("emptied", () => { avatarEl.style.display = "flex"; });
+
       const nameTag = document.createElement("div");
       Object.assign(nameTag.style, {
-        position: "absolute", bottom: "6px", left: "8px",
-        background: "rgba(0,0,0,0.55)", color: "#fff",
-        fontSize: "11px", padding: "2px 7px", borderRadius: "4px",
-        pointerEvents: "none",
+        position: "absolute", bottom: "8px", left: "8px", zIndex: 2,
+        background: "rgba(0,0,0,0.6)", color: "#fff",
+        fontSize: "11px", padding: "3px 8px", borderRadius: "4px",
+        backdropFilter: "blur(4px)",
       });
       nameTag.textContent = label;
       tile.appendChild(nameTag);
@@ -1361,8 +1430,20 @@
       const grid = groupCallWindow.querySelector("#gcVideoGrid");
       if (!grid) return;
       const n = grid.children.length;
-      const cols = n <= 1 ? 1 : n <= 2 ? 2 : n <= 4 ? 2 : 3;
+
+      let cols, rows;
+      if      (n === 1) { cols = 1; rows = 1; }
+      else if (n === 2) { cols = 2; rows = 1; }
+      else if (n <= 4)  { cols = 2; rows = 2; }
+      else if (n <= 6)  { cols = 3; rows = 2; }
+      else if (n <= 9)  { cols = 3; rows = 3; }
+      else              { cols = 4; rows = Math.ceil(n / 4); }
+
       grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      grid.style.gridTemplateRows    = `repeat(${rows}, 1fr)`;
+      grid.style.padding = n === 1 ? "0" : "3px";
+      grid.style.gap     = n === 1 ? "0" : "3px";
+
       const countEl = groupCallWindow.querySelector("#gcCount");
       if (countEl) countEl.textContent = `${n} participant${n !== 1 ? "s" : ""}`;
     }
@@ -1409,29 +1490,37 @@
       groupCallWindow = document.createElement("div");
       Object.assign(groupCallWindow.style, {
         position: "fixed", top: "20px", left: "20px",
-        width: "min(96vw, 620px)", height: "min(90vh, 520px)",
-        background: "#0d0e10", borderRadius: "16px", zIndex: 1000001,
+        width: "min(96vw, 720px)", height: "min(92vh, 600px)",
+        background: "#111213", borderRadius: "16px", zIndex: 1000001,
         display: "flex", flexDirection: "column", overflow: "hidden",
-        boxShadow: "0 16px 48px rgba(0,0,0,0.7)",
+        boxShadow: "0 16px 48px rgba(0,0,0,0.8)",
         border: "1px solid rgba(255,255,255,0.06)",
         fontFamily: "Inter, Arial, sans-serif",
       });
       groupCallWindow.innerHTML = `
-        <div id="gcHeader" style="padding:12px 16px; background:#080909; display:flex; align-items:center; gap:10px; cursor:grab; user-select:none; flex-shrink:0;">
-          <div style="width:8px; height:8px; border-radius:50%; background:#68d391; flex-shrink:0;"></div>
+        <div id="gcHeader" style="padding:10px 16px; background:#0a0b0c; display:flex; align-items:center; gap:10px; cursor:grab; user-select:none; flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.04);">
+          <div style="width:8px; height:8px; border-radius:50%; background:#68d391; flex-shrink:0; animation:pulse 1.5s infinite;"></div>
           <div style="font-weight:700; font-size:14px; color:#e6eefc; flex:1;">Group Call</div>
-          <div id="gcCount" style="font-size:12px; color:#9fb0e6; opacity:0.8;">1 participant</div>
-          <button id="gcClose" style="background:#333; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:13px; min-width:44px; min-height:44px; margin-left:8px;">✕</button>
+          <div id="gcCount" style="font-size:12px; color:#9fb0e6;">1 participant</div>
+          <button id="gcClose" style="background:rgba(255,255,255,0.08); border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:13px; min-width:44px; min-height:44px; margin-left:8px;">✕</button>
         </div>
-        <div id="gcVideoGrid" style="flex:1; display:grid; gap:4px; padding:4px; background:#000; overflow:hidden;"></div>
-        <div style="padding:14px 16px; background:#080909; display:flex; gap:12px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
-          <button id="gcMute"  style="width:52px; height:52px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center;">🎤</button>
-          <button id="gcVid"   style="width:52px; height:52px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center;">📷</button>
-          <button id="gcLeave" style="width:64px; height:64px; border-radius:50%; border:none; background:#e53e3e; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center;">📞</button>
+        <div id="gcVideoGrid" style="flex:1; display:grid; gap:3px; padding:3px; background:#000; overflow:hidden; align-items:stretch; justify-items:stretch;"></div>
+        <div style="padding:12px 16px; background:#0a0b0c; display:flex; gap:10px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
+          <button id="gcMute"  style="width:48px;height:48px;border-radius:50%;border:none;background:#2d3748;color:#fff;font-size:19px;cursor:pointer;display:flex;align-items:center;justify-content:center;">🎤</button>
+          <button id="gcVid"   style="width:48px;height:48px;border-radius:50%;border:none;background:#2d3748;color:#fff;font-size:19px;cursor:pointer;display:flex;align-items:center;justify-content:center;">📷</button>
+          <button id="gcLeave" style="width:60px;height:60px;border-radius:50%;border:none;background:#e53e3e;color:#fff;font-size:21px;cursor:pointer;display:flex;align-items:center;justify-content:center;">📞</button>
         </div>
       `;
       document.body.appendChild(groupCallWindow);
       makeResizable(groupCallWindow, 320, 280);
+
+      // Pulse animation (inject once)
+      if (!document.querySelector("#gcPulseStyle")) {
+        const st = document.createElement("style");
+        st.id = "gcPulseStyle";
+        st.textContent = `@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.4)} }`;
+        document.head.appendChild(st);
+      }
 
       // Drag
       const gh = groupCallWindow.querySelector("#gcHeader");
@@ -1494,6 +1583,8 @@
       let pendingOffer = null;
       let isGroupCall = false;
       let groupPeers  = new Map(); // username → { pc, stream, videoEl }
+      let activeGroupCallMembers = new Set();
+      let groupAnnounceTimer = null;
 
       const ICE_SERVERS = [
         { urls: "stun:stun.relay.metered.ca:80" },
@@ -1644,17 +1735,39 @@
             if (callState) return;
             isGroupCall = true;
             callPeer = msg._from;
-            showIncomingCallBanner(msg._from + " (group call)");
+            activeGroupCallMembers = new Set(msg.members || [msg._from]);
+            showIncomingCallBanner(`${msg._from} started a group call`);
+            renderUserList();
             break;
 
           case "call-group-join":
             if (!isGroupCall || !callState) return;
             if (msg._from === username) return;
+            activeGroupCallMembers.add(msg._from);
             handleNewGroupMember(msg._from);
+            // Announce updated member list so any future joiner sees full picture
+            sendWs({ type: "call-group-announce", members: [...activeGroupCallMembers, username] });
             break;
 
           case "call-group-leave":
-            if (isGroupCall) handleGroupPeerLeft(msg._from);
+            if (isGroupCall) {
+              handleGroupPeerLeft(msg._from);
+              activeGroupCallMembers.delete(msg._from);
+            } else {
+              activeGroupCallMembers.delete(msg._from);
+              renderUserList();
+            }
+            break;
+
+          case "call-group-announce":
+            activeGroupCallMembers = new Set(msg.members || []);
+            activeGroupCallMembers.delete(username);
+            if (!callState) renderUserList(); // refresh panel to show join button
+            break;
+
+          case "call-group-ended":
+            activeGroupCallMembers.clear();
+            if (!callState) renderUserList();
             break;
         }
       }
@@ -1728,7 +1841,15 @@
           _localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
           showGroupCallWindow();
           minifyChat();
-          sendWs({ type: "call-group-invite" });
+          activeGroupCallMembers.add(username);
+          sendWs({ type: "call-group-invite", members: [...activeGroupCallMembers] });
+          sendWs({ type: "call-group-announce", members: [...activeGroupCallMembers] });
+          // Beacon every 8s so late-joiners see the call in the panel
+          groupAnnounceTimer = setInterval(() => {
+            if (callState === "active-group") {
+              sendWs({ type: "call-group-announce", members: [...activeGroupCallMembers] });
+            }
+          }, 8000);
         } catch (e) {
           alert("Could not start group call: " + (e && e.message ? e.message : "check camera/mic"));
           callState = null; isGroupCall = false;
@@ -1742,6 +1863,7 @@
           _localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
           showGroupCallWindow();
           minifyChat();
+          activeGroupCallMembers.add(username);
           sendWs({ type: "call-group-join" }); // everyone in the call hears this and connects
         } catch (e) {
           alert("Could not join group call: " + (e && e.message ? e.message : "check camera/mic"));
@@ -1789,16 +1911,21 @@
       }
 
       function leaveGroupCall() {
-        sendWs({ type: "call-group-leave" });
+        if (groupAnnounceTimer) { clearInterval(groupAnnounceTimer); groupAnnounceTimer = null; }
+        activeGroupCallMembers.delete(username);
+        const remaining = activeGroupCallMembers.size;
+        sendWs({ type: remaining > 0 ? "call-group-leave" : "call-group-ended" });
         for (const [, pd] of groupPeers) {
           if (pd.pc) { try { pd.pc.close(); } catch (e) {} }
         }
         groupPeers.clear();
+        activeGroupCallMembers.clear();
         if (_localStream) { _localStream.getTracks().forEach(t => t.stop()); _localStream = null; }
         callState = null; isGroupCall = false; callPeer = null; pendingOffer = null;
         if (groupCallWindow) { try { groupCallWindow.remove(); } catch (e) {} groupCallWindow = null; }
         hideIncomingCallBanner();
         if (wsPaused) closeWs();
+        renderUserList(); // refresh panel to remove join button
       }
 
       // FIX 3 (core): createPeerConnection with ICE candidate queue + group call routing
@@ -1852,11 +1979,12 @@
       }
 
       const ctrl = {
-        get currentUsers() { return currentUsers; },
-        get _localStream() { return _localStream; },
+        get currentUsers()           { return currentUsers; },
+        get _localStream()           { return _localStream; },
+        get activeGroupCallMembers() { return activeGroupCallMembers; },
         startCall,
         acceptCall() { if (isGroupCall) acceptGroupCall(); else acceptCall_1to1(); },
-        rejectCall, endCall, startGroupCall, leaveGroupCall,
+        rejectCall, endCall, startGroupCall, acceptGroupCall, leaveGroupCall,
         isUserAtBottom() {
           return (msgBox.scrollHeight - (msgBox.scrollTop + msgBox.clientHeight)) < 80;
         },
