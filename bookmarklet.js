@@ -13,6 +13,7 @@
   const REACT_SUFFIX = "]\u200D\u200B";
   const REACT_RE = /\u200B\u200D\[react:([^:]+):([^:]+):(\d+)\]\u200D\u200B/;
   const QUICK_EMOJIS = ["\ud83d\udc4d", "\u2764\ufe0f", "\ud83d\ude02", "\ud83d\ude2e", "\ud83d\ude22", "\ud83d\ude21", "\ud83d\ude4f", "\ud83d\udd25"];
+  const IS_TOUCH_DEVICE = (("ontouchstart" in window) || (navigator.maxTouchPoints > 0) || window.matchMedia("(pointer: coarse)").matches);
 
   let sessionImgBBKey = null;
   let sessionRoomPasswords = {};
@@ -201,6 +202,38 @@
     return fetch(url, o).finally(() => clearTimeout(timer));
   }
 
+  // Try stricter then looser media constraints for school-managed devices.
+  async function getPreferredLocalMedia() {
+    const attempts = [
+      {
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 24, max: 30 },
+          facingMode: "user"
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      },
+      { video: true, audio: true },
+      { video: false, audio: true },
+      { video: true, audio: false }
+    ];
+    let lastErr = null;
+    for (const constraints of attempts) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (stream && stream.getTracks().length > 0) return stream;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("Could not access camera/microphone");
+  }
+
   // --- account helpers ---
   async function fetchUserRoomPasswords(token) {
     if (!token) return {};
@@ -334,6 +367,7 @@
       position: "relative", transition: "background 0.15s",
       animation: "dole-slideUp 0.2s ease",
     });
+    d.style.touchAction = "manipulation";
 
     const topRow = document.createElement("div");
     Object.assign(topRow.style, { display: "flex", alignItems: "center", gap: "8px" });
@@ -428,11 +462,43 @@
         borderRadius: "6px", cursor: "pointer", fontSize: "14px", color: "#fff",
         marginLeft: "auto", flexShrink: "0",
       });
+      if (IS_TOUCH_DEVICE) {
+        reactTrigger.style.opacity = "1";
+        reactTrigger.style.padding = "8px 10px";
+        reactTrigger.style.minWidth = "40px";
+        reactTrigger.style.minHeight = "40px";
+      }
       reactTrigger.addEventListener("click", (ev) => {
         ev.stopPropagation();
         showEmojiPicker(d, i, uname, chatController);
       });
       topRow.appendChild(reactTrigger);
+    }
+
+    if (chatController) {
+      let holdTimer = null;
+      let holdDone = false;
+      const clearHold = () => {
+        if (holdTimer) {
+          clearTimeout(holdTimer);
+          holdTimer = null;
+        }
+      };
+      d.addEventListener("pointerdown", (ev) => {
+        if (ev.pointerType !== "touch") return;
+        holdDone = false;
+        clearHold();
+        holdTimer = setTimeout(() => {
+          holdDone = true;
+          showEmojiPicker(d, i, uname, chatController);
+        }, 380);
+      });
+      d.addEventListener("pointerup", clearHold);
+      d.addEventListener("pointercancel", clearHold);
+      d.addEventListener("pointerleave", clearHold);
+      d.addEventListener("contextmenu", (ev) => {
+        if (holdDone) ev.preventDefault();
+      });
     }
 
     d.appendChild(topRow);
@@ -491,6 +557,10 @@
       boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
       border: "1px solid rgba(255,255,255,0.08)",
     });
+    if (IS_TOUCH_DEVICE) {
+      picker.style.padding = "8px 10px";
+      picker.style.gap = "6px";
+    }
     for (const emoji of QUICK_EMOJIS) {
       const btn = document.createElement("button");
       btn.className = "dole-btn";
@@ -500,6 +570,12 @@
         cursor: "pointer", padding: "4px 6px", borderRadius: "8px",
         transition: "background 0.12s, transform 0.12s",
       });
+      if (IS_TOUCH_DEVICE) {
+        btn.style.fontSize = "24px";
+        btn.style.padding = "8px 10px";
+        btn.style.minWidth = "44px";
+        btn.style.minHeight = "44px";
+      }
       btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,0.1)"; });
       btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; });
       btn.addEventListener("click", (ev) => {
@@ -513,8 +589,18 @@
     }
     msgEl.appendChild(picker);
     activeEmojiPicker = picker;
-    const dismiss = (ev) => { if (!picker.contains(ev.target)) { picker.remove(); activeEmojiPicker = null; document.removeEventListener("click", dismiss); } };
-    setTimeout(() => document.addEventListener("click", dismiss), 10);
+    const dismiss = (ev) => {
+      if (!picker.contains(ev.target)) {
+        picker.remove();
+        activeEmojiPicker = null;
+        document.removeEventListener("click", dismiss);
+        document.removeEventListener("pointerdown", dismiss);
+      }
+    };
+    setTimeout(() => {
+      document.addEventListener("click", dismiss);
+      document.addEventListener("pointerdown", dismiss);
+    }, 10);
   }
 
   // --- Inject global styles ---
@@ -532,7 +618,7 @@
     .dole-input:focus { border-color: #5865f2 !important; box-shadow: 0 0 0 3px rgba(88,101,242,0.25) !important; }
     .dole-msg:hover { background: rgba(255,255,255,0.04) !important; }
     .dole-msg:hover .dole-react-trigger { opacity:1 !important; }
-    .dole-react-trigger { opacity:0; transition: opacity 0.15s; }
+    .dole-react-trigger { opacity:0; transition: opacity 0.15s; touch-action: manipulation; }
     .dole-emoji-picker { animation: dole-slideUp 0.15s ease; }
     .dole-reaction-badge { display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:999px; font-size:13px; cursor:pointer; border:1px solid rgba(255,255,255,0.08); background:rgba(88,101,242,0.12); transition:background 0.15s,border-color 0.15s; user-select:none; }
     .dole-reaction-badge:hover { background:rgba(88,101,242,0.25); border-color:rgba(88,101,242,0.4); }
@@ -819,6 +905,7 @@
         <div style="padding:16px; background:rgba(0,0,0,0.3); display:flex; gap:12px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
           <button id="callMuteBtn" class="dole-btn" style="width:52px; height:52px; border-radius:50%; border:none; background:rgba(255,255,255,0.08); color:#fff; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s;">\ud83c\udf99\ufe0f</button>
           <button id="callVideoBtn" class="dole-btn" style="width:52px; height:52px; border-radius:50%; border:none; background:rgba(255,255,255,0.08); color:#fff; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s;">\ud83d\udcf7</button>
+          <button id="callDeafenBtn" class="dole-btn" style="width:52px; height:52px; border-radius:50%; border:none; background:rgba(255,255,255,0.08); color:#fff; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s;">\ud83d\udd08</button>
           <button id="callEndBtn" class="dole-btn" style="width:64px; height:64px; border-radius:50%; border:none; background:linear-gradient(135deg,#e53e3e,#c53030); color:#fff; font-size:24px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(229,62,62,0.4);">\ud83d\udcde</button>
         </div>
       `;
@@ -866,7 +953,7 @@
         }
       });
 
-      let muted = false, vidHidden = false;
+      let muted = false, vidHidden = false, deafened = false;
       callWindow.querySelector("#callMuteBtn").addEventListener("click", () => {
         muted = !muted;
         if (chatController && chatController._localStream)
@@ -881,6 +968,27 @@
         callWindow.querySelector("#callVideoBtn").textContent = vidHidden ? "🚫" : "📷";
         callWindow.querySelector("#callVideoBtn").style.background = vidHidden ? "#e53e3e" : "rgba(255,255,255,0.08)";
       });
+      callWindow.querySelector("#callDeafenBtn").addEventListener("click", () => {
+        deafened = !deafened;
+        if (remoteVideoEl) remoteVideoEl.muted = deafened;
+        callWindow.querySelector("#callDeafenBtn").textContent = deafened ? "🔇" : "🔈";
+        callWindow.querySelector("#callDeafenBtn").style.background = deafened ? "#e53e3e" : "rgba(255,255,255,0.08)";
+      });
+
+      const hasAudioTrack = !!(lStream && lStream.getAudioTracks && lStream.getAudioTracks().length > 0);
+      const hasVideoTrack = !!(lStream && lStream.getVideoTracks && lStream.getVideoTracks().length > 0);
+      if (!hasAudioTrack) {
+        const muteBtn = callWindow.querySelector("#callMuteBtn");
+        muteBtn.disabled = true;
+        muteBtn.style.opacity = "0.5";
+        muteBtn.title = "Microphone unavailable";
+      }
+      if (!hasVideoTrack) {
+        const videoBtn = callWindow.querySelector("#callVideoBtn");
+        videoBtn.disabled = true;
+        videoBtn.style.opacity = "0.5";
+        videoBtn.title = "Camera unavailable";
+      }
       callWindow.querySelector("#callEndBtn").addEventListener("click",   () => chatController.endCall());
       callWindow.querySelector("#callCloseBtn").addEventListener("click", () => chatController.endCall());
     }
@@ -948,12 +1056,19 @@
     function renderUserList() {
       const inner = userListPanel.querySelector("#userListInner");
       const empty = userListPanel.querySelector("#userListEmpty");
+      const startGroupBtn = userListPanel.querySelector("#startGroupCallBtn");
       const users = chatController ? chatController.currentUsers : [];
       const activeGroupCallMembers = chatController ? chatController.activeGroupCallMembers : null;
+      const callState = chatController ? chatController.callState : null;
+      const inActiveGroupCall = callState === "active-group";
+      const hasOngoingGroupCall = !!(activeGroupCallMembers && activeGroupCallMembers.size > 0);
+      if (startGroupBtn) {
+        startGroupBtn.textContent = inActiveGroupCall ? "In Group Call" : (hasOngoingGroupCall ? "Join Group" : "Group Call");
+      }
       inner.innerHTML = "";
 
       // ── Active group call banner ──────────────────────────────────────────
-      if (activeGroupCallMembers && activeGroupCallMembers.size > 0 && !chatController.callState) {
+      if (hasOngoingGroupCall) {
         const banner = document.createElement("div");
         Object.assign(banner.style, {
           display: "flex", flexDirection: "column", gap: "8px",
@@ -964,25 +1079,28 @@
         });
         const memberList = [...activeGroupCallMembers].slice(0, 4).join(", ")
           + (activeGroupCallMembers.size > 4 ? ` +${activeGroupCallMembers.size - 4} more` : "");
+        const titleText = inActiveGroupCall ? "You are in the room group call" : "Group call in progress";
         banner.innerHTML = `
           <div style="display:flex; align-items:center; gap:8px;">
             <div style="width:8px; height:8px; border-radius:50%; background:#68d391; animation:dole-pulse 1.5s infinite;"></div>
-            <div style="font-weight:700; font-size:14px; color:#e6eefc;">Group call in progress</div>
+            <div style="font-weight:700; font-size:14px; color:#e6eefc;">${titleText}</div>
           </div>
           <div style="font-size:12px; color:#9fb0e6;">${memberList}</div>
         `;
-        const joinBtn = document.createElement("button");
-        Object.assign(joinBtn.style, {
-          padding: "12px", borderRadius: "10px", border: "none",
-          background: "#5865f2", color: "#fff", cursor: "pointer",
-          fontSize: "14px", fontWeight: "700", minHeight: "44px",
-        });
-        joinBtn.textContent = "Join group call";
-        joinBtn.addEventListener("click", () => {
-          hideUserList();
-          chatController.acceptGroupCall();
-        });
-        banner.appendChild(joinBtn);
+        if (!inActiveGroupCall) {
+          const joinBtn = document.createElement("button");
+          Object.assign(joinBtn.style, {
+            padding: "12px", borderRadius: "10px", border: "none",
+            background: "#5865f2", color: "#fff", cursor: "pointer",
+            fontSize: "14px", fontWeight: "700", minHeight: "44px",
+          });
+          joinBtn.textContent = "Join group call";
+          joinBtn.addEventListener("click", () => {
+            hideUserList();
+            chatController.acceptGroupCall();
+          });
+          banner.appendChild(joinBtn);
+        }
 
         inner.appendChild(banner);
       }
@@ -1052,7 +1170,10 @@
     userListPanel.querySelector("#closeUserList").addEventListener("click", hideUserList);
     userListPanel.querySelector("#startGroupCallBtn").addEventListener("click", () => {
       hideUserList();
-      chatController.startGroupCall();
+      const members = chatController ? chatController.activeGroupCallMembers : null;
+      const inGroup = chatController && chatController.callState === "active-group";
+      if (!inGroup && members && members.size > 0) chatController.acceptGroupCall();
+      else chatController.startGroupCall();
     });
 
     callBtn.addEventListener("click", () => {
@@ -1548,6 +1669,8 @@
 
     // --- Group Call Window & Tile Management ---
     let groupCallWindow = null;
+    let groupRemoteAudioMuted = false;
+    let groupRemoteVolume = 1;
 
     function createVideoTile(peerId, label, muted = false) {
       const tile = document.createElement("div");
@@ -1590,7 +1713,45 @@
       });
       nameTag.textContent = label;
       tile.appendChild(nameTag);
+
+      if (peerId !== "local") {
+        const volWrap = document.createElement("div");
+        Object.assign(volWrap.style, {
+          position: "absolute", right: "8px", bottom: "8px", zIndex: 2,
+          background: "rgba(0,0,0,0.65)", borderRadius: "8px",
+          padding: "2px 6px", display: "flex", alignItems: "center", gap: "4px",
+        });
+        const icon = document.createElement("span");
+        icon.textContent = "🔊";
+        icon.style.fontSize = "10px";
+        const slider = document.createElement("input");
+        slider.type = "range";
+        slider.min = "0";
+        slider.max = "100";
+        slider.value = String(Math.round(groupRemoteVolume * 100));
+        Object.assign(slider.style, {
+          width: "62px",
+          accentColor: "#5865f2",
+          cursor: "pointer",
+        });
+        slider.addEventListener("input", () => {
+          groupRemoteVolume = Math.max(0, Math.min(1, Number(slider.value) / 100));
+          vid.volume = groupRemoteVolume;
+        });
+        volWrap.appendChild(icon);
+        volWrap.appendChild(slider);
+        tile.appendChild(volWrap);
+      }
       return tile;
+    }
+
+    function applyGroupRemoteAudioState() {
+      if (!groupCallWindow) return;
+      const remoteVideos = groupCallWindow.querySelectorAll("#gcVideoGrid [data-peer] video");
+      for (const v of remoteVideos) {
+        v.muted = groupRemoteAudioMuted;
+        v.volume = groupRemoteVolume;
+      }
     }
 
     function updateGridLayout() {
@@ -1638,10 +1799,13 @@
       if (stream) {
         const vid = tile.querySelector("video");
         vid.srcObject = stream;
+        vid.muted = groupRemoteAudioMuted;
+        vid.volume = groupRemoteVolume;
         vid.play().catch(() => {});
       }
       grid.appendChild(tile);
       updateGridLayout();
+      applyGroupRemoteAudioState();
       return tile.querySelector("video");
     }
 
@@ -1655,6 +1819,8 @@
 
     function showGroupCallWindow() {
       if (groupCallWindow) { try { groupCallWindow.remove(); } catch (e) {} }
+      groupRemoteAudioMuted = false;
+      groupRemoteVolume = 1;
       groupCallWindow = document.createElement("div");
       Object.assign(groupCallWindow.style, {
         position: "fixed", top: "20px", left: "20px",
@@ -1700,7 +1866,7 @@
       });
       gh.addEventListener("pointerup", () => drag = false);
 
-      let muted = false, vidOff = false;
+      let muted = false, vidOff = false, deafened = false;
       groupCallWindow.querySelector("#gcMute").addEventListener("click", () => {
         muted = !muted;
         if (chatController._localStream) chatController._localStream.getAudioTracks().forEach(t => t.enabled = !muted);
@@ -1715,6 +1881,25 @@
         b.textContent = vidOff ? "🚫" : "📷";
         b.style.background = vidOff ? "#e53e3e" : "rgba(255,255,255,0.08)";
       });
+      const deafenBtn = document.createElement("button");
+      deafenBtn.id = "gcDeafen";
+      deafenBtn.className = "dole-btn";
+      Object.assign(deafenBtn.style, {
+        width: "48px", height: "48px", borderRadius: "50%", border: "none",
+        background: "rgba(255,255,255,0.08)", color: "#fff", fontSize: "18px",
+        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+        transition: "background 0.2s"
+      });
+      deafenBtn.textContent = "🔈";
+      const leaveBtn = groupCallWindow.querySelector("#gcLeave");
+      leaveBtn.parentNode.insertBefore(deafenBtn, leaveBtn);
+      deafenBtn.addEventListener("click", () => {
+        deafened = !deafened;
+        groupRemoteAudioMuted = deafened;
+        applyGroupRemoteAudioState();
+        deafenBtn.textContent = deafened ? "🔇" : "🔈";
+        deafenBtn.style.background = deafened ? "#e53e3e" : "rgba(255,255,255,0.08)";
+      });
       groupCallWindow.querySelector("#gcLeave").addEventListener("click", () => chatController.leaveGroupCall());
       groupCallWindow.querySelector("#gcClose").addEventListener("click",  () => chatController.leaveGroupCall());
 
@@ -1726,6 +1911,7 @@
       const SLOW_POLL_MS = 30000;
       const WS_RECONNECT_BASE = 2000;
       const WS_RECONNECT_MAX = 30000;
+      const controllerRoom = currentRoom;
 
       let ws = null;
       let wsReconnectTimer = null;
@@ -1746,6 +1932,17 @@
       let activeGroupCallMembers = new Set();
       let groupAnnounceTimer = null;
 
+      function inferSender(msg) {
+        if (!msg || typeof msg !== "object") return "";
+        return String(msg._from || msg.from || msg.username || msg.user || "").trim();
+      }
+      function isSameRoomPayload(msg) {
+        if (!msg || typeof msg !== "object") return true;
+        const roomValue = msg.room || msg.room_name || msg.chat || msg.channel;
+        if (roomValue === undefined || roomValue === null || roomValue === "") return true;
+        return String(roomValue).trim() === controllerRoom;
+      }
+
       const ICE_SERVERS = [
         { urls: "stun:stun.relay.metered.ca:80" },
         { urls: "turn:global.relay.metered.ca:80", username: "951956895909a9291fb1adb3", credential: "EGUb/agb91aFy24M" },
@@ -1765,14 +1962,15 @@
         }
 
         try {
-          const proof = await fetchRoomProof(token, currentRoom);
+          const proof = await fetchRoomProof(token, controllerRoom);
           if (!proof) { scheduleReconnect(); return; }
-          const wsUrl = `${CHAT_BASE.replace("https://", "wss://").replace("http://", "ws://")}/room/${encodeURIComponent(currentRoom)}?proof=${encodeURIComponent(proof)}`;
+          const wsUrl = `${CHAT_BASE.replace("https://", "wss://").replace("http://", "ws://")}/room/${encodeURIComponent(controllerRoom)}?proof=${encodeURIComponent(proof)}`;
           ws = new WebSocket(wsUrl);
           ws.addEventListener("open",  () => { wsReconnectDelay = WS_RECONNECT_BASE; updateWsIndicator(true); });
           ws.addEventListener("message", (evt) => {
             try {
               const msg = JSON.parse(evt.data);
+              if (!isSameRoomPayload(msg)) return;
               if (msg.type === "chat")                       handleIncomingChatMessage(msg);
               else if (msg.type === "presence")              handlePresence(msg.users || []);
               else if (msg.type && msg.type.startsWith("call-")) handleCallSignal(msg);
@@ -1811,6 +2009,7 @@
       const recentMsgIds = new Set();
 
       function handleIncomingChatMessage(msg) {
+        if (!isSameRoomPayload(msg)) return;
         // Build a signature from username + text + timestamp (rounded to 2s to handle minor clock drift)
         const sig = `${msg.username}:${String(msg.text).slice(0, 80)}:${Math.round((msg.time || msg.ts || 0) / 2000)}`;
         if (recentMsgIds.has(sig)) return;
@@ -1858,10 +2057,10 @@
 
       async function slowPoll() {
         if (!wsActive || wsPaused) return;
-        const roomAtPollStart = currentRoom;
+        const roomAtPollStart = controllerRoom;
         try {
           const data = await ctrl.getMessages();
-          if (!wsActive || wsPaused || currentRoom !== roomAtPollStart) return;
+          if (!wsActive || wsPaused || controllerRoom !== roomAtPollStart || currentRoom !== controllerRoom) return;
           if (!data || !Array.isArray(data.messages)) return;
           const newMessages = data.messages;
           if (newMessages.length !== lastCount) {
@@ -1876,17 +2075,20 @@
       }
 
       function handleCallSignal(msg) {
+        const fromUser = inferSender(msg);
         switch (msg.type) {
           case "call-offer":
-            if (isGroupCall) { handleGroupOffer(msg._from, msg.sdp); return; }
+            if (!fromUser) return;
+            if (isGroupCall) { handleGroupOffer(fromUser, msg.sdp); return; }
             if (callState) return;
-            callState = "incoming"; callPeer = msg._from; pendingOffer = msg.sdp;
-            showIncomingCallBanner(msg._from);
+            callState = "incoming"; callPeer = fromUser; pendingOffer = msg.sdp;
+            showIncomingCallBanner(fromUser);
             break;
 
           case "call-answer":
+            if (!fromUser) return;
             if (isGroupCall) {
-              const pd = groupPeers.get(msg._from);
+              const pd = groupPeers.get(fromUser);
               if (pd && pd.pc) pd.pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: msg.sdp }))
                 .then(() => { if (pd.pc._flushIce) pd.pc._flushIce(); })
                 .catch(e => console.error("group answer:", e));
@@ -1900,8 +2102,9 @@
             break;
 
           case "call-ice":
+            if (!fromUser) return;
             if (isGroupCall) {
-              const pd = groupPeers.get(msg._from);
+              const pd = groupPeers.get(fromUser);
               if (pd && pd.pc && msg.candidate) {
                 if (pd.pc._queueOrAddIce) pd.pc._queueOrAddIce(msg.candidate);
                 else pd.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(() => {});
@@ -1916,35 +2119,38 @@
 
           case "call-end":
           case "call-reject":
-            if (isGroupCall) { handleGroupPeerLeft(msg._from); return; }
+            if (isGroupCall) { if (fromUser) handleGroupPeerLeft(fromUser); return; }
             endCall(msg.type === "call-reject" ? "rejected" : "ended");
             break;
 
           case "call-group-invite":
+            if (!fromUser) return;
             if (callState) return;
             isGroupCall = true;
             callState = "incoming";
-            callPeer = msg._from;
-            activeGroupCallMembers = new Set(msg.members || [msg._from]);
-            showIncomingCallBanner(`${msg._from} started a group call`);
+            callPeer = fromUser;
+            activeGroupCallMembers = new Set(msg.members || [fromUser]);
+            showIncomingCallBanner(`${fromUser} started a group call`);
             renderUserList();
             break;
 
           case "call-group-join":
+            if (!fromUser) return;
             if (!isGroupCall || !callState) return;
-            if (msg._from === username) return;
-            activeGroupCallMembers.add(msg._from);
-            handleNewGroupMember(msg._from);
+            if (fromUser === username) return;
+            activeGroupCallMembers.add(fromUser);
+            handleNewGroupMember(fromUser);
             // Announce updated member list so any future joiner sees full picture
             sendWs({ type: "call-group-announce", members: [...activeGroupCallMembers, username] });
             break;
 
           case "call-group-leave":
+            if (!fromUser) return;
             if (isGroupCall) {
-              handleGroupPeerLeft(msg._from);
-              activeGroupCallMembers.delete(msg._from);
+              handleGroupPeerLeft(fromUser);
+              activeGroupCallMembers.delete(fromUser);
             } else {
-              activeGroupCallMembers.delete(msg._from);
+              activeGroupCallMembers.delete(fromUser);
               renderUserList();
             }
             break;
@@ -1966,7 +2172,9 @@
         if (callState) { alert("Already in a call"); return; }
         try {
           callState = "outgoing"; callPeer = targetUsername;
-          _localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          _localStream = await getPreferredLocalMedia();
+          if (_localStream.getAudioTracks().length === 0) alert("Mic not available. Call will be listen-only.");
+          if (_localStream.getVideoTracks().length === 0) alert("Camera not available. Call will be audio-only.");
           peerConnection = createPeerConnection(targetUsername);
           _localStream.getTracks().forEach(t => peerConnection.addTrack(t, _localStream));
           const offer = await peerConnection.createOffer();
@@ -1981,7 +2189,9 @@
         if (callState !== "incoming" || !pendingOffer) return;
         hideIncomingCallBanner();
         try {
-          _localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          _localStream = await getPreferredLocalMedia();
+          if (_localStream.getAudioTracks().length === 0) alert("Mic not available. Call will be listen-only.");
+          if (_localStream.getVideoTracks().length === 0) alert("Camera not available. Call will be audio-only.");
           peerConnection = createPeerConnection(callPeer);
           _localStream.getTracks().forEach(t => peerConnection.addTrack(t, _localStream));
 
@@ -2034,9 +2244,15 @@
 
       async function startGroupCall() {
         if (callState) { alert("Already in a call"); return; }
+        if (activeGroupCallMembers.size > 0) {
+          alert("A group call is already running in this room. Join it from the call panel.");
+          return;
+        }
         try {
           isGroupCall = true; callState = "active-group";
-          _localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          _localStream = await getPreferredLocalMedia();
+          if (_localStream.getAudioTracks().length === 0) alert("Mic not available. Group call will be listen-only.");
+          if (_localStream.getVideoTracks().length === 0) alert("Camera not available. Group call will be audio-only.");
           showGroupCallWindow();
           minifyChat();
           activeGroupCallMembers.add(username);
@@ -2055,11 +2271,17 @@
       }
 
       async function acceptGroupCall() {
+        if (callState && callState !== "incoming" && callState !== "active-group") {
+          alert("Finish your current call before joining the group call.");
+          return;
+        }
         hideIncomingCallBanner();
         try {
           const existingMembers = [...activeGroupCallMembers].filter(m => m !== username);
           isGroupCall = true; callState = "active-group";
-          _localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          _localStream = await getPreferredLocalMedia();
+          if (_localStream.getAudioTracks().length === 0) alert("Mic not available. Group call will be listen-only.");
+          if (_localStream.getVideoTracks().length === 0) alert("Camera not available. Group call will be audio-only.");
           showGroupCallWindow();
           minifyChat();
           activeGroupCallMembers.add(username);
@@ -2192,21 +2414,21 @@
           return (msgBox.scrollHeight - (msgBox.scrollTop + msgBox.clientHeight)) < 80;
         },
         async getMessages() {
-          const url = `${CHAT_BASE}/room/${encodeURIComponent(currentRoom)}/messages`;
-          const proof = await fetchRoomProof(token, currentRoom);
+          const url = `${CHAT_BASE}/room/${encodeURIComponent(controllerRoom)}/messages`;
+          const proof = await fetchRoomProof(token, controllerRoom);
           const headers = {};
           if (token) headers.Authorization = token;
           if (proof) headers["X-Room-Auth"] = proof;
-          const pwd = getRoomPassword(currentRoom);
+          const pwd = getRoomPassword(controllerRoom);
           if (pwd) headers["X-Room-Password"] = pwd;
           const res = await fetchWithTimeout(url, { headers }, 8000);
           if (res.status === 401 || res.status === 403) {
-            const ans = await promptPasswordForRoom(currentRoom, "access");
+            const ans = await promptPasswordForRoom(controllerRoom, "access");
             if (!ans || !ans.password) throw new Error("Auth required");
-            if (ans.remember) { const saved = await postSaveRoomPassword(token, currentRoom, ans.password); if (saved) userRoomPasswords[currentRoom] = ans.password; }
-            else sessionRoomPasswords[currentRoom] = ans.password;
-            delete roomProofs[currentRoom];
-            const proof2 = await fetchRoomProof(token, currentRoom);
+            if (ans.remember) { const saved = await postSaveRoomPassword(token, controllerRoom, ans.password); if (saved) userRoomPasswords[controllerRoom] = ans.password; }
+            else sessionRoomPasswords[controllerRoom] = ans.password;
+            delete roomProofs[controllerRoom];
+            const proof2 = await fetchRoomProof(token, controllerRoom);
             const headers2 = {};
             if (token) headers2.Authorization = token;
             if (proof2) headers2["X-Room-Auth"] = proof2;
@@ -2220,21 +2442,21 @@
         async sendMessage(text) {
           const success = sendWs({ type: "chat", text });
           if (success) return { success: true };
-          const url = `${CHAT_BASE}/room/${encodeURIComponent(currentRoom)}/send`;
-          const proof = await fetchRoomProof(token, currentRoom);
+          const url = `${CHAT_BASE}/room/${encodeURIComponent(controllerRoom)}/send`;
+          const proof = await fetchRoomProof(token, controllerRoom);
           const headers = { "Content-Type": "application/json" };
           if (token) headers.Authorization = token;
           if (proof) headers["X-Room-Auth"] = proof;
-          const pwd = getRoomPassword(currentRoom);
+          const pwd = getRoomPassword(controllerRoom);
           if (pwd) headers["X-Room-Password"] = pwd;
           const res = await fetchWithTimeout(url, { method: "POST", headers, body: JSON.stringify({ text }) }, 8000);
           if (res.status === 401 || res.status === 403) {
-            delete roomProofs[currentRoom];
-            const ans = await promptPasswordForRoom(currentRoom, "access");
+            delete roomProofs[controllerRoom];
+            const ans = await promptPasswordForRoom(controllerRoom, "access");
             if (!ans || !ans.password) throw new Error("Auth required");
-            if (ans.remember) { const saved = await postSaveRoomPassword(token, currentRoom, ans.password); if (saved) userRoomPasswords[currentRoom] = ans.password; }
-            else sessionRoomPasswords[currentRoom] = ans.password;
-            const proof2 = await fetchRoomProof(token, currentRoom);
+            if (ans.remember) { const saved = await postSaveRoomPassword(token, controllerRoom, ans.password); if (saved) userRoomPasswords[controllerRoom] = ans.password; }
+            else sessionRoomPasswords[controllerRoom] = ans.password;
+            const proof2 = await fetchRoomProof(token, controllerRoom);
             const headers2 = { "Content-Type": "application/json" };
             if (token) headers2.Authorization = token;
             if (proof2) headers2["X-Room-Auth"] = proof2;
