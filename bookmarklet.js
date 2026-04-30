@@ -9,6 +9,10 @@
   })();
 
   const ROOMS_LIST_KEY = "dole_chat_rooms";
+  const REACT_PREFIX = "\u200B\u200D[react:";
+  const REACT_SUFFIX = "]\u200D\u200B";
+  const REACT_RE = /\u200B\u200D\[react:([^:]+):([^:]+):(\d+)\]\u200D\u200B/;
+  const QUICK_EMOJIS = ["\ud83d\udc4d", "\u2764\ufe0f", "\ud83d\ude02", "\ud83d\ude2e", "\ud83d\ude22", "\ud83d\ude21", "\ud83d\ude4f", "\ud83d\udd25"];
 
   let sessionImgBBKey = null;
   let sessionRoomPasswords = {};
@@ -22,68 +26,70 @@
     const header = el.querySelector(":scope > div") || el;
     header.style.cursor = "grab";
     header.style.userSelect = "none";
+    header.style.touchAction = "none";
+    el.style.touchAction = "none";
     let dragging = false, moved = false, offsetX = 0, offsetY = 0, startX = 0, startY = 0;
+    let activePointerId = null;
+    let transformCleared = false;
     const origBg = header.style.background;
-    const origTouchAction = el.style.touchAction || "";
     const threshold = options.threshold || 6;
 
     function shouldIgnoreStart(target) {
       return !!target.closest("button, input, textarea, [contenteditable], #chatMessages");
     }
+    function clearCenterTransform() {
+      if (transformCleared) return;
+      const t = el.style.transform || "";
+      if (t && t.includes("translate")) {
+        const rect = el.getBoundingClientRect();
+        el.style.transform = "none";
+        el.style.left = rect.left + "px";
+        el.style.top = rect.top + "px";
+      }
+      transformCleared = true;
+    }
     function start(e) {
-      const isTouch = e.type && e.type.startsWith && e.type.startsWith("touch");
-      const clientX = isTouch ? (e.touches && e.touches[0] && e.touches[0].clientX) : e.clientX;
-      const clientY = isTouch ? (e.touches && e.touches[0] && e.touches[0].clientY) : e.clientY;
       if (shouldIgnoreStart(e.target)) return;
+      if (activePointerId !== null) return;
+      clearCenterTransform();
+      activePointerId = e.pointerId;
       dragging = false; moved = false;
-      startX = clientX; startY = clientY;
-      offsetX = clientX - el.getBoundingClientRect().left;
-      offsetY = clientY - el.getBoundingClientRect().top;
-      document.addEventListener("mousemove", move);
-      document.addEventListener("mouseup", end);
-      document.addEventListener("touchmove", move, { passive: false });
-      document.addEventListener("touchend", end);
-      document.addEventListener("pointermove", move);
-      document.addEventListener("pointerup", end);
-      if (e.preventDefault) e.preventDefault();
+      startX = e.clientX; startY = e.clientY;
+      offsetX = e.clientX - el.getBoundingClientRect().left;
+      offsetY = e.clientY - el.getBoundingClientRect().top;
+      header.setPointerCapture(e.pointerId);
+      e.preventDefault();
     }
     function move(e) {
-      const isTouch = e.type && e.type.startsWith && e.type.startsWith("touch");
-      const clientX = isTouch ? (e.touches && e.touches[0] && e.touches[0].clientX) : e.clientX;
-      const clientY = isTouch ? (e.touches && e.touches[0] && e.touches[0].clientY) : e.clientY;
-      const dx = clientX - startX, dy = clientY - startY;
+      if (e.pointerId !== activePointerId) return;
+      const dx = e.clientX - startX, dy = e.clientY - startY;
       if (!dragging) {
         if (Math.hypot(dx, dy) < threshold) return;
         dragging = true;
         header.style.cursor = "grabbing";
         header.style.background = "rgba(0,0,0,0.18)";
         el.style.userSelect = "none";
-        el.style.touchAction = "none";
       }
-      const left = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, clientX - offsetX));
-      const top = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, clientY - offsetY));
+      const left = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, e.clientX - offsetX));
+      const top = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, e.clientY - offsetY));
       el.style.left = left + "px";
       el.style.top = top + "px";
-      if (isTouch && e.preventDefault) e.preventDefault();
+      e.preventDefault();
       moved = true;
     }
-    function end() {
-      document.removeEventListener("mousemove", move);
-      document.removeEventListener("mouseup", end);
-      document.removeEventListener("touchmove", move);
-      document.removeEventListener("touchend", end);
-      document.removeEventListener("pointermove", move);
-      document.removeEventListener("pointerup", end);
+    function end(e) {
+      if (e.pointerId !== activePointerId) return;
+      activePointerId = null;
       if (!dragging && !moved) el.click();
       dragging = false;
       header.style.cursor = "grab";
       header.style.background = origBg || "";
       el.style.userSelect = "";
-      el.style.touchAction = origTouchAction;
     }
     header.addEventListener("pointerdown", start);
-    header.addEventListener("mousedown", start);
-    header.addEventListener("touchstart", start, { passive: false });
+    header.addEventListener("pointermove", move);
+    header.addEventListener("pointerup", end);
+    header.addEventListener("pointercancel", end);
   }
 
   function registerEl(el) {
@@ -299,28 +305,61 @@
     } catch (e) { return []; }
   }
 
+  // --- reaction helpers ---
+  function makeReactMessage(emoji, targetUser, targetIndex) {
+    return REACT_PREFIX + emoji + ":" + targetUser + ":" + targetIndex + REACT_SUFFIX;
+  }
+  function parseReaction(text) {
+    if (typeof text !== "string") return null;
+    const match = text.match(REACT_RE);
+    if (!match) return null;
+    return { emoji: match[1], targetUser: match[2], targetIndex: parseInt(match[3], 10) };
+  }
+  function isReactionMessage(m) {
+    return parseReaction(String(m.text || "")) !== null;
+  }
+
   // --- message rendering ---
-  function appendMessageToContainer(container, m, i) {
+  function appendMessageToContainer(container, m, i, allMessages, chatController, username) {
+    const text = String(m.text || "");
+    if (isReactionMessage(m)) return;
+
     const d = document.createElement("div");
-    d.style.background = i % 2 === 0 ? "#40444b" : "#36393f";
-    d.style.padding = "6px 8px";
-    d.style.borderRadius = "8px";
-    d.style.wordBreak = "break-word";
-    d.style.fontSize = "15px";
-    d.style.display = "flex";
-    d.style.justifyContent = "space-between";
-    d.style.alignItems = "flex-start";
-    d.style.gap = "8px";
+    d.className = "dole-msg";
+    d.dataset.msgIndex = String(i);
+    d.dataset.msgUser = String(m.username || "unknown");
+    Object.assign(d.style, {
+      padding: "8px 12px", borderRadius: "10px", wordBreak: "break-word",
+      fontSize: "14px", display: "flex", flexDirection: "column", gap: "4px",
+      position: "relative", transition: "background 0.15s",
+      animation: "dole-slideUp 0.2s ease",
+    });
+
+    const topRow = document.createElement("div");
+    Object.assign(topRow.style, { display: "flex", alignItems: "center", gap: "8px" });
+
+    const avatar = document.createElement("div");
+    const uname = String(m.username || "unknown");
+    const hue = [...uname].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+    Object.assign(avatar.style, {
+      width: "28px", height: "28px", borderRadius: "50%",
+      background: `hsl(${hue}, 55%, 45%)`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: "13px", fontWeight: "700", color: "#fff", flexShrink: "0",
+      textTransform: "uppercase",
+    });
+    avatar.textContent = uname.charAt(0);
+    topRow.appendChild(avatar);
+
+    const strong = document.createElement("strong");
+    strong.textContent = uname;
+    Object.assign(strong.style, { color: `hsl(${hue}, 70%, 75%)`, fontSize: "13px", fontWeight: "600" });
+    topRow.appendChild(strong);
 
     const left = document.createElement("div");
     left.style.flex = "1 1 auto";
     left.style.minWidth = "0";
 
-    const strong = document.createElement("strong");
-    strong.textContent = String(m.username || "unknown");
-    left.appendChild(strong);
-
-    const text = String(m.text || "");
     const trimmed = text.trim();
 
     if (trimmed && isImageUrl(trimmed) && trimmed === text) {
@@ -363,46 +402,172 @@
       wrapper.appendChild(imgButton);
       left.appendChild(wrapper);
     } else {
-      left.appendChild(document.createTextNode(": " + text));
+      const textSpan = document.createElement("span");
+      textSpan.style.color = "#dcddde";
+      textSpan.textContent = text;
+      left.appendChild(textSpan);
     }
 
     const tsDate = parseMessageTimestamp(m);
     const timeEl = document.createElement("div");
-    Object.assign(timeEl.style, { marginLeft: "8px", opacity: "0.75", fontSize: "12px", whiteSpace: "nowrap", flex: "0 0 auto" });
+    Object.assign(timeEl.style, { opacity: "0.45", fontSize: "11px", whiteSpace: "nowrap", flex: "0 0 auto" });
     if (tsDate) {
       timeEl.dataset.ts = String(tsDate.getTime());
       timeEl.textContent = timeAgoShort(tsDate);
       timeEl.title = tsDate.toLocaleString();
     }
+    topRow.appendChild(timeEl);
+
+    // Reaction trigger button
+    if (chatController) {
+      const reactTrigger = document.createElement("button");
+      reactTrigger.className = "dole-react-trigger dole-btn";
+      reactTrigger.textContent = "\ud83d\ude00";
+      Object.assign(reactTrigger.style, {
+        background: "rgba(255,255,255,0.06)", border: "none", padding: "2px 6px",
+        borderRadius: "6px", cursor: "pointer", fontSize: "14px", color: "#fff",
+        marginLeft: "auto", flexShrink: "0",
+      });
+      reactTrigger.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        showEmojiPicker(d, i, uname, chatController);
+      });
+      topRow.appendChild(reactTrigger);
+    }
+
+    d.appendChild(topRow);
     d.appendChild(left);
-    d.appendChild(timeEl);
+
+    // Render reactions for this message
+    if (allMessages) {
+      const reactions = collectReactionsForMessage(allMessages, i, uname);
+      if (reactions.size > 0) {
+        const reactRow = document.createElement("div");
+        Object.assign(reactRow.style, { display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "2px" });
+        for (const [emoji, users] of reactions) {
+          const badge = document.createElement("span");
+          badge.className = "dole-reaction-badge" + (users.includes(username) ? " mine" : "");
+          badge.textContent = emoji + " " + users.length;
+          badge.title = users.join(", ");
+          badge.addEventListener("click", () => {
+            if (chatController) {
+              const reactText = makeReactMessage(emoji, uname, i);
+              chatController.sendMessage(reactText).catch(() => {});
+            }
+          });
+          reactRow.appendChild(badge);
+        }
+        d.appendChild(reactRow);
+      }
+    }
+
     container.appendChild(d);
   }
+
+  function collectReactionsForMessage(allMessages, targetIndex, targetUser) {
+    const reactions = new Map();
+    for (const m of allMessages) {
+      const r = parseReaction(String(m.text || ""));
+      if (!r) continue;
+      if (r.targetIndex === targetIndex && r.targetUser === targetUser) {
+        if (!reactions.has(r.emoji)) reactions.set(r.emoji, []);
+        const list = reactions.get(r.emoji);
+        const reactor = String(m.username || "unknown");
+        if (!list.includes(reactor)) list.push(reactor);
+      }
+    }
+    return reactions;
+  }
+
+  let activeEmojiPicker = null;
+  function showEmojiPicker(msgEl, msgIndex, msgUser, chatController) {
+    if (activeEmojiPicker) { activeEmojiPicker.remove(); activeEmojiPicker = null; }
+    const picker = document.createElement("div");
+    picker.className = "dole-emoji-picker";
+    Object.assign(picker.style, {
+      position: "absolute", top: "-4px", right: "8px", transform: "translateY(-100%)",
+      background: "#1e2030", borderRadius: "12px", padding: "6px 8px",
+      display: "flex", gap: "2px", zIndex: "100",
+      boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+      border: "1px solid rgba(255,255,255,0.08)",
+    });
+    for (const emoji of QUICK_EMOJIS) {
+      const btn = document.createElement("button");
+      btn.className = "dole-btn";
+      btn.textContent = emoji;
+      Object.assign(btn.style, {
+        background: "transparent", border: "none", fontSize: "20px",
+        cursor: "pointer", padding: "4px 6px", borderRadius: "8px",
+        transition: "background 0.12s, transform 0.12s",
+      });
+      btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,0.1)"; });
+      btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; });
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const reactText = makeReactMessage(emoji, msgUser, msgIndex);
+        chatController.sendMessage(reactText).catch(() => {});
+        picker.remove();
+        activeEmojiPicker = null;
+      });
+      picker.appendChild(btn);
+    }
+    msgEl.appendChild(picker);
+    activeEmojiPicker = picker;
+    const dismiss = (ev) => { if (!picker.contains(ev.target)) { picker.remove(); activeEmojiPicker = null; document.removeEventListener("click", dismiss); } };
+    setTimeout(() => document.addEventListener("click", dismiss), 10);
+  }
+
+  // --- Inject global styles ---
+  const globalStyle = document.createElement("style");
+  globalStyle.id = "dole-bookmarklet-styles";
+  globalStyle.textContent = `
+    @keyframes dole-fadeIn { from { opacity:0; transform:translateY(8px) scale(0.97); } to { opacity:1; transform:translateY(0) scale(1); } }
+    @keyframes dole-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(1.4); } }
+    @keyframes dole-spin { to { transform:rotate(360deg); } }
+    @keyframes dole-slideUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+    .dole-btn { transition: background 0.18s, transform 0.12s, box-shadow 0.18s; }
+    .dole-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
+    .dole-btn:active { transform: translateY(0) scale(0.97); }
+    .dole-input { transition: border-color 0.2s, box-shadow 0.2s; }
+    .dole-input:focus { border-color: #5865f2 !important; box-shadow: 0 0 0 3px rgba(88,101,242,0.25) !important; }
+    .dole-msg:hover { background: rgba(255,255,255,0.04) !important; }
+    .dole-msg:hover .dole-react-trigger { opacity:1 !important; }
+    .dole-react-trigger { opacity:0; transition: opacity 0.15s; }
+    .dole-emoji-picker { animation: dole-slideUp 0.15s ease; }
+    .dole-reaction-badge { display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:999px; font-size:13px; cursor:pointer; border:1px solid rgba(255,255,255,0.08); background:rgba(88,101,242,0.12); transition:background 0.15s,border-color 0.15s; user-select:none; }
+    .dole-reaction-badge:hover { background:rgba(88,101,242,0.25); border-color:rgba(88,101,242,0.4); }
+    .dole-reaction-badge.mine { border-color:rgba(88,101,242,0.5); background:rgba(88,101,242,0.2); }
+  `;
+  document.head.appendChild(globalStyle);
 
   // --- LOGIN UI ---
   const loginBox = document.createElement("div");
   Object.assign(loginBox.style, {
-    position: "fixed", top: "20px", right: "20px",
-    width: "min(95vw, 320px)", background: "#2c2f33", color: "#fff",
-    zIndex: 999999, borderRadius: "12px", display: "flex",
+    position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+    width: "min(92vw, 360px)", background: "linear-gradient(165deg, #1e2030, #171923)", color: "#fff",
+    zIndex: 999999, borderRadius: "20px", display: "flex",
     flexDirection: "column", overflow: "hidden",
-    fontFamily: "Arial, sans-serif", boxShadow: "0 8px 20px rgba(0,0,0,0.4)",
-    maxHeight: "90vh",
+    fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
+    boxShadow: "0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)",
+    maxHeight: "90vh", animation: "dole-fadeIn 0.3s ease",
+    backdropFilter: "blur(20px)",
   });
 
   loginBox.innerHTML = `
-    <div style="padding:12px; background:#23272a; font-weight:bold; text-align:center; position:relative; font-size:16px;">
-      Login / Create Account
-      <button id="closeLogin" style="position:absolute; right:10px; top:8px; background:red; color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; font-size:15px;">X</button>
+    <div style="padding:24px 20px 16px; text-align:center; position:relative;">
+      <div style="font-size:36px; margin-bottom:8px;">\ud83d\udcac</div>
+      <div style="font-weight:800; font-size:20px; color:#e6eefc; letter-spacing:-0.3px;">Welcome to Dole Chat</div>
+      <div style="font-size:13px; color:#7289da; margin-top:4px; opacity:0.8;">Sign in or create an account</div>
+      <button id="closeLogin" class="dole-btn" style="position:absolute; right:14px; top:14px; background:rgba(255,255,255,0.06); color:#9fb0e6; border:none; width:36px; height:36px; border-radius:10px; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center;">\u2715</button>
     </div>
-    <div style="padding:10px; display:flex; flex-direction:column; gap:8px; background:#2c2f33;">
-      <input id="loginUser" placeholder="Username" style="padding:12px; border-radius:10px; border:none; outline:none; font-size:16px;">
-      <input id="loginPass" type="password" placeholder="Password" style="padding:12px; border-radius:10px; border:none; outline:none; font-size:16px;">
-      <div style="display:flex; gap:8px;">
-        <button id="loginBtn" style="flex:1; padding:10px; border-radius:10px; border:none; background:#7289da; color:white; cursor:pointer; font-size:16px;">Login</button>
-        <button id="createBtn" style="flex:1; padding:10px; border-radius:10px; border:none; background:#43b581; color:white; cursor:pointer; font-size:16px;">Create</button>
+    <div style="padding:4px 20px 24px; display:flex; flex-direction:column; gap:12px;">
+      <input id="loginUser" class="dole-input" placeholder="Username" style="padding:14px 16px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); outline:none; font-size:15px; background:rgba(0,0,0,0.3); color:#fff; font-family:inherit;">
+      <input id="loginPass" class="dole-input" type="password" placeholder="Password" style="padding:14px 16px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); outline:none; font-size:15px; background:rgba(0,0,0,0.3); color:#fff; font-family:inherit;">
+      <div style="display:flex; gap:10px; margin-top:4px;">
+        <button id="loginBtn" class="dole-btn" style="flex:1; padding:14px; border-radius:12px; border:none; background:linear-gradient(135deg,#5865f2,#4752c4); color:white; cursor:pointer; font-size:15px; font-weight:700; letter-spacing:0.3px;">Sign In</button>
+        <button id="createBtn" class="dole-btn" style="flex:1; padding:14px; border-radius:12px; border:none; background:linear-gradient(135deg,#2f855a,#276749); color:white; cursor:pointer; font-size:15px; font-weight:700; letter-spacing:0.3px;">Sign Up</button>
       </div>
-      <div id="loginMsg" style="color:#ff5555; font-size:14px; min-height:18px;"></div>
+      <div id="loginMsg" style="color:#fc8181; font-size:13px; min-height:18px; text-align:center;"></div>
     </div>
   `;
 
@@ -455,49 +620,45 @@
     const box = document.createElement("div");
     Object.assign(box.style, {
       position: "fixed", top: "20px", right: "20px",
-      width: "min(95vw, 360px)", height: "min(80vh, 600px)",
-      background: "#18191c", color: "#ffffff", zIndex: 999999,
-      borderRadius: "12px", display: "flex", flexDirection: "column",
-      overflow: "hidden", fontFamily: "Inter, Arial, sans-serif",
-      boxShadow: "0 12px 40px rgba(0,0,0,0.6)",
-      border: "1px solid rgba(255,255,255,0.03)"
+      width: "min(95vw, 380px)", height: "min(80vh, 640px)",
+      background: "linear-gradient(180deg, #13141a, #0f1014)", color: "#ffffff", zIndex: 999999,
+      borderRadius: "16px", display: "flex", flexDirection: "column",
+      overflow: "hidden", fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
+      boxShadow: "0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05)",
+      animation: "dole-fadeIn 0.3s ease",
     });
 
     box.innerHTML = `
-      <div id="chatHeader" style="padding:12px; background:linear-gradient(180deg,#111214,#17181b); font-weight:600; text-align:center; position:relative; font-size:15px; display:flex; align-items:center;">
-        <div style="display:flex; gap:8px; align-items:center; position:absolute; left:12px;">
-          <button id="minifyChat" title="Minify" style="background:transparent; border:none; color:#bfc7ff; padding:8px; border-radius:8px; cursor:pointer; font-size:18px; min-width:44px; min-height:44px;">_</button>
+      <div id="chatHeader" style="padding:12px 14px; background:linear-gradient(180deg,#16171f,#12131a); font-weight:600; position:relative; font-size:15px; display:flex; align-items:center; gap:8px; border-bottom:1px solid rgba(255,255,255,0.04);">
+        <button id="minifyChat" title="Minimize" class="dole-btn" style="background:rgba(255,255,255,0.05); border:none; color:#9fb0e6; width:34px; height:34px; border-radius:10px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">\u2014</button>
+        <div style="flex:1; display:flex; align-items:center; gap:8px; justify-content:center; min-width:0;">
+          <div id="wsIndicator" title="Connecting..." style="width:8px; height:8px; border-radius:50%; background:#fc8181; flex-shrink:0;"></div>
+          <div style="font-weight:700; color:#e6eefc; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Dole Chat</div>
+          <div id="book_username" style="font-weight:500; color:#7289da; font-size:12px; opacity:0.9;"></div>
         </div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <div style="font-weight:700; color:#e6eefc;">Friends Chat</div>
-          <div id="book_username" style="font-weight:500; color:#9fb0e6; opacity:0.9;"></div>
-          <div id="wsIndicator" title="Connecting..." style="width:8px; height:8px; border-radius:50%; background:#fc8181; margin-left:4px;"></div>
-        </div>
-        <div style="position:absolute; right:12px; display:flex; gap:8px; align-items:center;">
-          <button id="callBtn" title="Call someone" style="background:#2f855a; color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; font-size:18px; min-width:44px; min-height:44px;">📞</button>
-          <button id="closeChat" style="background:#ff6b6b; color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; font-size:14px; min-width:44px; min-height:44px;">✕</button>
-        </div>
+        <button id="callBtn" title="Call" class="dole-btn" style="background:linear-gradient(135deg,#2f855a,#276749); color:white; border:none; width:34px; height:34px; border-radius:10px; cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">\ud83d\udcde</button>
+        <button id="closeChat" class="dole-btn" style="background:rgba(255,107,107,0.15); color:#fc8181; border:none; width:34px; height:34px; border-radius:10px; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">\u2715</button>
       </div>
 
-      <div style="padding:10px; display:flex; gap:8px; align-items:center; background:#141518; border-bottom:1px solid rgba(255,255,255,0.02); flex-shrink:0;">
-        <button id="openRoomsBtn" style="padding:8px 12px; border-radius:10px; border:none; background:#2f855a; color:white; cursor:pointer; font-size:13px; min-height:44px;">Room</button>
-        <button id="openExploreBtn" style="padding:8px 12px; border-radius:10px; border:none; background:#2b6cb0; color:white; cursor:pointer; font-size:13px; min-height:44px;">Explore</button>
-        <div id="currentRoomDisplay" style="font-size:13px; opacity:0.9; color:#ddd; margin-left:auto;">room: ${currentRoom}</div>
+      <div style="padding:8px 12px; display:flex; gap:8px; align-items:center; background:rgba(0,0,0,0.15); border-bottom:1px solid rgba(255,255,255,0.03); flex-shrink:0;">
+        <button id="openRoomsBtn" class="dole-btn" style="padding:7px 14px; border-radius:8px; border:none; background:rgba(47,133,90,0.2); color:#68d391; cursor:pointer; font-size:12px; font-weight:600; min-height:32px;">\ud83d\udce6 Rooms</button>
+        <button id="openExploreBtn" class="dole-btn" style="padding:7px 14px; border-radius:8px; border:none; background:rgba(43,108,176,0.2); color:#63b3ed; cursor:pointer; font-size:12px; font-weight:600; min-height:32px;">\ud83d\udd0d Explore</button>
+        <div id="currentRoomDisplay" style="font-size:12px; color:#7289da; margin-left:auto; font-weight:500; background:rgba(88,101,242,0.1); padding:4px 10px; border-radius:6px;"># ${currentRoom}</div>
       </div>
 
-      <div id="chatMessages" style="flex:1; padding:12px; overflow-y:auto; background:linear-gradient(180deg,#0f1113,#141518); display:flex; flex-direction:column; gap:8px; -webkit-overflow-scrolling:touch;"></div>
+      <div id="chatMessages" style="flex:1; padding:8px 10px; overflow-y:auto; background:transparent; display:flex; flex-direction:column; gap:4px; -webkit-overflow-scrolling:touch;"></div>
 
-      <div id="imageInputRow" style="display:none; padding:8px 10px; background:#0f1113; gap:8px; align-items:center; flex-shrink:0; flex-direction:row;">
-        <input id="imageUrlInput" placeholder="Paste image URL..." style="flex:1; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); outline:none; font-size:14px; background:#0c0d0f; color:#fff;">
-        <button id="imageUrlSend" style="padding:8px 10px; border-radius:8px; border:none; background:#2f855a; color:white; cursor:pointer; font-size:14px; min-height:44px;">Send</button>
-        <button id="imageUploadBtn" style="padding:8px 10px; border-radius:8px; border:none; background:#2b6cb0; color:white; cursor:pointer; font-size:14px; min-height:44px;">Upload</button>
-        <button id="imageUrlCancel" style="padding:8px 10px; border-radius:8px; border:none; background:#555; color:white; cursor:pointer; font-size:14px; min-height:44px;">Cancel</button>
+      <div id="imageInputRow" style="display:none; padding:8px 10px; background:rgba(0,0,0,0.2); gap:8px; align-items:center; flex-shrink:0; flex-direction:row; border-top:1px solid rgba(255,255,255,0.03);">
+        <input id="imageUrlInput" class="dole-input" placeholder="Paste image URL..." style="flex:1; padding:8px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.06); outline:none; font-size:13px; background:rgba(0,0,0,0.3); color:#fff; font-family:inherit;">
+        <button id="imageUrlSend" class="dole-btn" style="padding:8px 10px; border-radius:8px; border:none; background:#2f855a; color:white; cursor:pointer; font-size:13px; min-height:36px; font-weight:600;">Send</button>
+        <button id="imageUploadBtn" class="dole-btn" style="padding:8px 10px; border-radius:8px; border:none; background:#2b6cb0; color:white; cursor:pointer; font-size:13px; min-height:36px; font-weight:600;">Upload</button>
+        <button id="imageUrlCancel" class="dole-btn" style="padding:8px 10px; border-radius:8px; border:none; background:rgba(255,255,255,0.08); color:#aaa; cursor:pointer; font-size:13px; min-height:36px;">Cancel</button>
       </div>
 
-      <div style="padding:12px; background:#0f1113; display:flex; gap:8px; align-items:center; border-top:1px solid rgba(255,255,255,0.02); flex-shrink:0;">
-        <button id="imageBtn" title="Add image" style="padding:8px 10px; border-radius:10px; border:none; background:#2b6cb0; color:white; cursor:pointer; font-size:16px; min-height:44px;">🖼️</button>
-        <input id="chatInput" style="flex:1; padding:12px; border-radius:10px; border:1px solid rgba(255,255,255,0.04); outline:none; font-size:15px; background:#0c0d0f; color:#fff;" placeholder="Type a message...">
-        <button id="chatSend" style="padding:10px 14px; border-radius:10px; border:none; background:#2f855a; color:white; cursor:pointer; font-size:15px; min-height:44px;">Send</button>
+      <div style="padding:10px 12px; background:rgba(0,0,0,0.2); display:flex; gap:8px; align-items:center; border-top:1px solid rgba(255,255,255,0.04); flex-shrink:0;">
+        <button id="imageBtn" title="Add image" class="dole-btn" style="padding:6px 8px; border-radius:8px; border:none; background:rgba(43,108,176,0.2); color:#63b3ed; cursor:pointer; font-size:16px; min-height:40px; min-width:40px; display:flex; align-items:center; justify-content:center;">\ud83d\uddbc\ufe0f</button>
+        <input id="chatInput" class="dole-input" style="flex:1; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.06); outline:none; font-size:14px; background:rgba(0,0,0,0.3); color:#fff; font-family:inherit;" placeholder="Type a message...">
+        <button id="chatSend" class="dole-btn" style="padding:10px 16px; border-radius:10px; border:none; background:linear-gradient(135deg,#5865f2,#4752c4); color:white; cursor:pointer; font-size:14px; min-height:40px; font-weight:600;">Send</button>
       </div>
     `;
 
@@ -625,40 +786,40 @@
       Object.assign(callWindow.style, {
         position: "fixed", top: "20px", left: "20px",
         width: "min(92vw, 420px)", height: "min(85vh, 560px)",
-        background: "#0d0e10", borderRadius: "16px", zIndex: 1000001,
+        background: "linear-gradient(180deg, #0d0e12, #08090c)", borderRadius: "20px", zIndex: 1000001,
         display: "flex", flexDirection: "column", overflow: "hidden",
-        boxShadow: "0 16px 48px rgba(0,0,0,0.7)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        fontFamily: "Inter, Arial, sans-serif",
+        boxShadow: "0 24px 64px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.06)",
+        fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
+        animation: "dole-fadeIn 0.3s ease",
       });
 
       callWindow.innerHTML = `
-        <div id="callHeader" style="padding:14px 16px; background:#080909; display:flex; align-items:center; gap:10px; cursor:grab; user-select:none; flex-shrink:0;">
-          <div style="width:10px; height:10px; border-radius:50%; background:#fc8181;" id="callDot"></div>
-          <div style="flex:1; font-weight:700; font-size:15px; color:#e6eefc;" id="callHeaderName">Calling ${escapeHtml(peerName)}...</div>
-          <div id="callStatus" style="font-size:12px; color:#9fb0e6; opacity:0.8;"></div>
-          <button id="callCloseBtn" style="background:#333; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:14px; min-width:44px; min-height:44px;">✕</button>
+        <div id="callHeader" style="padding:12px 16px; background:rgba(0,0,0,0.3); display:flex; align-items:center; gap:10px; cursor:grab; user-select:none; flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.04);">
+          <div style="width:8px; height:8px; border-radius:50%; background:#fc8181;" id="callDot"></div>
+          <div style="flex:1; font-weight:700; font-size:14px; color:#e6eefc;" id="callHeaderName">Calling ${escapeHtml(peerName)}...</div>
+          <div id="callStatus" style="font-size:11px; color:#9fb0e6; opacity:0.8;"></div>
+          <button id="callCloseBtn" class="dole-btn" style="background:rgba(255,255,255,0.06); border:none; width:34px; height:34px; border-radius:10px; cursor:pointer; color:#9fb0e6; font-size:13px; display:flex; align-items:center; justify-content:center;">\u2715</button>
         </div>
         <div style="flex:1; position:relative; background:#000; overflow:hidden;">
           <video id="remoteVideo" autoplay playsinline style="width:100%; height:100%; object-fit:cover; display:block;"></video>
-          <video id="localVideo" autoplay muted playsinline style="position:absolute; bottom:14px; right:14px; width:110px; height:82px; object-fit:cover; border-radius:10px; border:2px solid rgba(255,255,255,0.2);"></video>
-          <div id="callWaiting" style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; color:#e6eefc;">
-            <div style="font-size:52px;">👤</div>
-            <div style="font-size:15px; opacity:0.7;">Waiting for ${escapeHtml(peerName)}...</div>
+          <video id="localVideo" autoplay muted playsinline style="position:absolute; bottom:14px; right:14px; width:120px; height:90px; object-fit:cover; border-radius:12px; border:2px solid rgba(255,255,255,0.15); box-shadow:0 4px 12px rgba(0,0,0,0.5);"></video>
+          <div id="callWaiting" style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; color:#e6eefc; background:radial-gradient(circle at center, rgba(88,101,242,0.08), transparent);">
+            <div style="width:72px; height:72px; border-radius:50%; background:linear-gradient(135deg,#5865f2,#4752c4); display:flex; align-items:center; justify-content:center; font-size:32px; box-shadow:0 8px 24px rgba(88,101,242,0.3);">\ud83d\udc64</div>
+            <div style="font-size:15px; opacity:0.7; font-weight:500;">Waiting for ${escapeHtml(peerName)}...</div>
           </div>
-          <button id="unmuteRemote" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); padding:12px 20px; background:rgba(0,0,0,0.7); border:none; border-radius:12px; color:#fff; font-size:14px; cursor:pointer; align-items:center; gap:8px;">
-            🔊 Tap to hear audio
+          <button id="unmuteRemote" class="dole-btn" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); padding:12px 20px; background:rgba(0,0,0,0.7); border:none; border-radius:12px; color:#fff; font-size:14px; cursor:pointer; align-items:center; gap:8px; backdrop-filter:blur(8px);">
+            \ud83d\udd0a Tap to hear audio
           </button>
         </div>
-        <div style="padding:10px 16px; background:#080909; display:flex; align-items:center; gap:10px; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
-          <span style="font-size:12px; color:#9fb0e6; white-space:nowrap;">🔊 Vol</span>
+        <div style="padding:8px 16px; background:rgba(0,0,0,0.3); display:flex; align-items:center; gap:10px; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
+          <span style="font-size:11px; color:#9fb0e6; white-space:nowrap;">\ud83d\udd0a</span>
           <input id="volumeSlider" type="range" min="0" max="100" value="80"
-            style="flex:1; accent-color:#2f855a; cursor:pointer;">
+            style="flex:1; accent-color:#5865f2; cursor:pointer; height:4px;">
         </div>
-        <div style="padding:16px; background:#080909; display:flex; gap:12px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
-          <button id="callMuteBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:56px;">🎤</button>
-          <button id="callVideoBtn" style="width:56px; height:56px; border-radius:50%; border:none; background:#2d3748; color:#fff; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:56px;">📷</button>
-          <button id="callEndBtn" style="width:72px; height:72px; border-radius:50%; border:none; background:#e53e3e; color:#fff; font-size:26px; cursor:pointer; display:flex; align-items:center; justify-content:center; min-height:72px;">📞</button>
+        <div style="padding:16px; background:rgba(0,0,0,0.3); display:flex; gap:12px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
+          <button id="callMuteBtn" class="dole-btn" style="width:52px; height:52px; border-radius:50%; border:none; background:rgba(255,255,255,0.08); color:#fff; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s;">\ud83c\udf99\ufe0f</button>
+          <button id="callVideoBtn" class="dole-btn" style="width:52px; height:52px; border-radius:50%; border:none; background:rgba(255,255,255,0.08); color:#fff; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s;">\ud83d\udcf7</button>
+          <button id="callEndBtn" class="dole-btn" style="width:64px; height:64px; border-radius:50%; border:none; background:linear-gradient(135deg,#e53e3e,#c53030); color:#fff; font-size:24px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(229,62,62,0.4);">\ud83d\udcde</button>
         </div>
       `;
 
@@ -710,15 +871,15 @@
         muted = !muted;
         if (chatController && chatController._localStream)
           chatController._localStream.getAudioTracks().forEach(t => t.enabled = !muted);
-        callWindow.querySelector("#callMuteBtn").textContent = muted ? "🔇" : "🎤";
-        callWindow.querySelector("#callMuteBtn").style.background = muted ? "#e53e3e" : "#2d3748";
+        callWindow.querySelector("#callMuteBtn").textContent = muted ? "🔇" : "🎙️";
+        callWindow.querySelector("#callMuteBtn").style.background = muted ? "#e53e3e" : "rgba(255,255,255,0.08)";
       });
       callWindow.querySelector("#callVideoBtn").addEventListener("click", () => {
         vidHidden = !vidHidden;
         if (chatController && chatController._localStream)
           chatController._localStream.getVideoTracks().forEach(t => t.enabled = !vidHidden);
         callWindow.querySelector("#callVideoBtn").textContent = vidHidden ? "🚫" : "📷";
-        callWindow.querySelector("#callVideoBtn").style.background = vidHidden ? "#e53e3e" : "#2d3748";
+        callWindow.querySelector("#callVideoBtn").style.background = vidHidden ? "#e53e3e" : "rgba(255,255,255,0.08)";
       });
       callWindow.querySelector("#callEndBtn").addEventListener("click",   () => chatController.endCall());
       callWindow.querySelector("#callCloseBtn").addEventListener("click", () => chatController.endCall());
@@ -729,20 +890,21 @@
     incomingBanner.id = "incomingCallBanner";
     Object.assign(incomingBanner.style, {
       position: "absolute", left: "0", right: "0", top: "0",
-      background: "linear-gradient(135deg, #1a472a, #2f855a)",
+      background: "linear-gradient(135deg, #1a2040, #1a3a28)",
       zIndex: 46, display: "none", flexDirection: "column",
-      alignItems: "center", padding: "20px 16px", gap: "14px",
-      borderRadius: "12px 12px 0 0",
-      boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-      border: "1px solid rgba(255,255,255,0.06)",
+      alignItems: "center", padding: "24px 16px", gap: "14px",
+      borderRadius: "16px 16px 0 0",
+      boxShadow: "0 12px 32px rgba(0,0,0,0.6)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      animation: "dole-fadeIn 0.25s ease",
     });
     incomingBanner.innerHTML = `
-      <div style="font-size:32px;">📞</div>
-      <div id="incomingCallerName" style="font-size:17px; font-weight:700; color:#fff; text-align:center;"></div>
-      <div style="font-size:13px; color:rgba(255,255,255,0.7);">Incoming video call</div>
-      <div style="display:flex; gap:16px; width:100%; justify-content:center;">
-        <button id="acceptCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#68d391; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:44px;">Accept</button>
-        <button id="rejectCallBtn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:#fc8181; color:#1a202c; font-size:16px; font-weight:700; cursor:pointer; min-height:44px;">Reject</button>
+      <div style="width:56px; height:56px; border-radius:50%; background:linear-gradient(135deg,#2f855a,#276749); display:flex; align-items:center; justify-content:center; font-size:26px; box-shadow:0 6px 20px rgba(47,133,90,0.4);">\ud83d\udcde</div>
+      <div id="incomingCallerName" style="font-size:16px; font-weight:700; color:#fff; text-align:center;"></div>
+      <div style="font-size:12px; color:rgba(255,255,255,0.6); font-weight:500;">Incoming video call</div>
+      <div style="display:flex; gap:12px; width:100%; justify-content:center; margin-top:4px;">
+        <button id="acceptCallBtn" class="dole-btn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:linear-gradient(135deg,#48bb78,#38a169); color:#1a202c; font-size:15px; font-weight:700; cursor:pointer; min-height:44px; box-shadow:0 4px 12px rgba(72,187,120,0.3);">Accept</button>
+        <button id="rejectCallBtn" class="dole-btn" style="flex:1; max-width:140px; padding:14px; border-radius:12px; border:none; background:linear-gradient(135deg,#fc8181,#e53e3e); color:#1a202c; font-size:15px; font-weight:700; cursor:pointer; min-height:44px; box-shadow:0 4px 12px rgba(229,62,62,0.3);">Reject</button>
       </div>
     `;
     box.appendChild(incomingBanner);
@@ -804,7 +966,7 @@
           + (activeGroupCallMembers.size > 4 ? ` +${activeGroupCallMembers.size - 4} more` : "");
         banner.innerHTML = `
           <div style="display:flex; align-items:center; gap:8px;">
-            <div style="width:8px; height:8px; border-radius:50%; background:#68d391; animation:pulse 1.5s infinite;"></div>
+            <div style="width:8px; height:8px; border-radius:50%; background:#68d391; animation:dole-pulse 1.5s infinite;"></div>
             <div style="font-weight:700; font-size:14px; color:#e6eefc;">Group call in progress</div>
           </div>
           <div style="font-size:12px; color:#9fb0e6;">${memberList}</div>
@@ -821,14 +983,6 @@
           chatController.acceptGroupCall();
         });
         banner.appendChild(joinBtn);
-
-        // Pulse animation
-        if (!document.querySelector("#gcPulseStyle")) {
-          const st = document.createElement("style");
-          st.id = "gcPulseStyle";
-          st.textContent = `@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.4)} }`;
-          document.head.appendChild(st);
-        }
 
         inner.appendChild(banner);
       }
@@ -914,16 +1068,17 @@
         position: "fixed",
         left: Math.max(8, rect.left + 8) + "px",
         top: Math.max(8, rect.top + 8) + "px",
-        width: "56px", height: "56px",
-        background: "#2b6cb0", color: "#fff",
-        borderRadius: "28px", display: "flex",
+        width: "52px", height: "52px",
+        background: "linear-gradient(135deg, #5865f2, #4752c4)", color: "#fff",
+        borderRadius: "16px", display: "flex",
         alignItems: "center", justifyContent: "center",
         zIndex: 1000000, cursor: "pointer",
-        boxShadow: "0 8px 20px rgba(0,0,0,0.3)",
-        fontSize: "24px", touchAction: "manipulation",
+        boxShadow: "0 8px 24px rgba(88,101,242,0.4)",
+        fontSize: "22px", touchAction: "manipulation",
+        animation: "dole-fadeIn 0.2s ease",
       });
       icon.title = "Restore Chat";
-      icon.innerText = "✉";
+      icon.innerText = "\u2709";
       document.body.appendChild(icon);
       registerEl(icon);
       icon.onclick = () => {
@@ -991,50 +1146,63 @@
     const addRoomBtn = modal.querySelector("#addRoomBtn");
     const addAndSwitchBtn = modal.querySelector("#addAndSwitchBtn");
 
+    const passwordOverlay = document.createElement("div");
+    Object.assign(passwordOverlay.style, {
+      position: "absolute", inset: "0",
+      background: "rgba(12,13,15,0.95)", zIndex: "42",
+      display: "none", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      padding: "24px", borderRadius: "16px",
+      backdropFilter: "blur(8px)",
+      color: "#fff",
+    });
     const passwordModal = document.createElement("div");
     Object.assign(passwordModal.style, {
-      background: "#111214", padding: "12px", borderRadius: "10px",
-      display: "none", flexDirection: "column", gap: "8px",
-      color: "#fff", border: "1px solid rgba(255,255,255,0.03)"
+      background: "#111214", padding: "20px", borderRadius: "14px",
+      display: "flex", flexDirection: "column", gap: "10px",
+      color: "#fff", border: "1px solid rgba(255,255,255,0.06)",
+      width: "min(90%, 300px)",
+      boxShadow: "0 12px 32px rgba(0,0,0,0.6)",
     });
     passwordModal.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <strong id="pwdModalTitle">Enter password</strong>
-        <button id="pwdModalClose" style="background:#444; border:none; padding:6px 8px; border-radius:8px; cursor:pointer; color:#fff;">X</button>
+        <strong id="pwdModalTitle" style="font-size:15px; color:#e6eefc;">Enter password</strong>
+        <button id="pwdModalClose" style="background:rgba(255,255,255,0.06); border:none; padding:6px 10px; border-radius:8px; cursor:pointer; color:#9fb0e6; font-size:14px;">✕</button>
       </div>
-      <div style="display:flex; flex-direction:column; gap:6px;">
-        <input id="pwdInput" type="password" placeholder="Password" style="padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.03); outline:none; font-size:14px; background:#0c0d0f; color:#fff;">
-        <label style="font-size:13px; display:flex; gap:8px; align-items:center;"><input id="pwdRemember" type="checkbox"> Save to account</label>
-        <div style="display:flex; gap:8px;">
-          <button id="pwdSubmit" style="flex:1; padding:8px; border-radius:8px; border:none; background:#2f855a; color:white; cursor:pointer;">Submit</button>
-          <button id="pwdCancel" style="flex:1; padding:8px; border-radius:8px; border:none; background:#555; color:white; cursor:pointer;">Cancel</button>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <input id="pwdInput" type="password" placeholder="Room password" class="dole-input" style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.06); outline:none; font-size:14px; background:rgba(0,0,0,0.3); color:#fff; font-family:inherit;">
+        <label style="font-size:13px; display:flex; gap:8px; align-items:center; color:#9fb0e6;"><input id="pwdRemember" type="checkbox"> Save to account</label>
+        <div style="display:flex; gap:8px; margin-top:4px;">
+          <button id="pwdSubmit" class="dole-btn" style="flex:1; padding:12px; border-radius:10px; border:none; background:linear-gradient(135deg,#2f855a,#276749); color:white; cursor:pointer; font-weight:600; font-size:14px;">Submit</button>
+          <button id="pwdCancel" class="dole-btn" style="flex:1; padding:12px; border-radius:10px; border:none; background:rgba(255,255,255,0.08); color:#aaa; cursor:pointer; font-weight:600; font-size:14px;">Cancel</button>
         </div>
       </div>
     `;
-    modal.appendChild(passwordModal);
+    passwordOverlay.appendChild(passwordModal);
+    box.appendChild(passwordOverlay);
 
     function showPasswordModal(title) {
-      passwordModal.style.display = "flex";
-      modal.querySelector("#pwdModalTitle").textContent = title || "Enter password";
-      modal.querySelector("#pwdInput").value = "";
-      modal.querySelector("#pwdRemember").checked = true;
-      modal.querySelector("#pwdInput").focus();
+      passwordOverlay.style.display = "flex";
+      passwordModal.querySelector("#pwdModalTitle").textContent = title || "Enter password";
+      passwordModal.querySelector("#pwdInput").value = "";
+      passwordModal.querySelector("#pwdRemember").checked = true;
+      setTimeout(() => { try { passwordModal.querySelector("#pwdInput").focus(); } catch (e) {} }, 50);
     }
-    function hidePasswordModal() { passwordModal.style.display = "none"; }
+    function hidePasswordModal() { passwordOverlay.style.display = "none"; }
 
     function promptPasswordForRoom(room, purpose = "access") {
       return new Promise((resolve) => {
         showPasswordModal(purpose === "claim" ? `Set password to claim "${room}"` : (purpose === "update-claim" ? `New password for "${room}"` : `Password for "${room}"`));
         const submit = () => {
-          const pwd = modal.querySelector("#pwdInput").value;
-          const remember = !!modal.querySelector("#pwdRemember").checked;
+          const pwd = passwordModal.querySelector("#pwdInput").value;
+          const remember = !!passwordModal.querySelector("#pwdRemember").checked;
           hidePasswordModal();
           resolve({ password: pwd, remember });
         };
         const cancel = () => { hidePasswordModal(); resolve(null); };
-        const closeBtn2 = modal.querySelector("#pwdModalClose");
-        const submitBtn = modal.querySelector("#pwdSubmit");
-        const cancelBtn = modal.querySelector("#pwdCancel");
+        const closeBtn2 = passwordModal.querySelector("#pwdModalClose");
+        const submitBtn = passwordModal.querySelector("#pwdSubmit");
+        const cancelBtn = passwordModal.querySelector("#pwdCancel");
         function cleanup() {
           submitBtn.removeEventListener("click", submit);
           cancelBtn.removeEventListener("click", cancel);
@@ -1491,36 +1659,28 @@
       Object.assign(groupCallWindow.style, {
         position: "fixed", top: "20px", left: "20px",
         width: "min(96vw, 720px)", height: "min(92vh, 600px)",
-        background: "#111213", borderRadius: "16px", zIndex: 1000001,
+        background: "linear-gradient(180deg, #0d0e12, #08090c)", borderRadius: "20px", zIndex: 1000001,
         display: "flex", flexDirection: "column", overflow: "hidden",
-        boxShadow: "0 16px 48px rgba(0,0,0,0.8)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        fontFamily: "Inter, Arial, sans-serif",
+        boxShadow: "0 24px 64px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.06)",
+        fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
+        animation: "dole-fadeIn 0.3s ease",
       });
       groupCallWindow.innerHTML = `
-        <div id="gcHeader" style="padding:10px 16px; background:#0a0b0c; display:flex; align-items:center; gap:10px; cursor:grab; user-select:none; flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.04);">
-          <div style="width:8px; height:8px; border-radius:50%; background:#68d391; flex-shrink:0; animation:pulse 1.5s infinite;"></div>
+        <div id="gcHeader" style="padding:10px 16px; background:rgba(0,0,0,0.3); display:flex; align-items:center; gap:10px; cursor:grab; user-select:none; flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.04);">
+          <div style="width:8px; height:8px; border-radius:50%; background:#68d391; flex-shrink:0; animation:dole-pulse 1.5s infinite;"></div>
           <div style="font-weight:700; font-size:14px; color:#e6eefc; flex:1;">Group Call</div>
           <div id="gcCount" style="font-size:12px; color:#9fb0e6;">1 participant</div>
-          <button id="gcClose" style="background:rgba(255,255,255,0.08); border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:13px; min-width:44px; min-height:44px; margin-left:8px;">✕</button>
+          <button id="gcClose" class="dole-btn" style="background:rgba(255,255,255,0.06); border:none; width:34px; height:34px; border-radius:10px; cursor:pointer; color:#9fb0e6; font-size:13px; display:flex; align-items:center; justify-content:center; margin-left:8px;">\u2715</button>
         </div>
         <div id="gcVideoGrid" style="flex:1; display:grid; gap:3px; padding:3px; background:#000; overflow:hidden; align-items:stretch; justify-items:stretch;"></div>
-        <div style="padding:12px 16px; background:#0a0b0c; display:flex; gap:10px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
-          <button id="gcMute"  style="width:48px;height:48px;border-radius:50%;border:none;background:#2d3748;color:#fff;font-size:19px;cursor:pointer;display:flex;align-items:center;justify-content:center;">🎤</button>
-          <button id="gcVid"   style="width:48px;height:48px;border-radius:50%;border:none;background:#2d3748;color:#fff;font-size:19px;cursor:pointer;display:flex;align-items:center;justify-content:center;">📷</button>
-          <button id="gcLeave" style="width:60px;height:60px;border-radius:50%;border:none;background:#e53e3e;color:#fff;font-size:21px;cursor:pointer;display:flex;align-items:center;justify-content:center;">📞</button>
+        <div style="padding:12px 16px; background:rgba(0,0,0,0.3); display:flex; gap:10px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
+          <button id="gcMute" class="dole-btn" style="width:48px;height:48px;border-radius:50%;border:none;background:rgba(255,255,255,0.08);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;">\ud83c\udf99\ufe0f</button>
+          <button id="gcVid" class="dole-btn" style="width:48px;height:48px;border-radius:50%;border:none;background:rgba(255,255,255,0.08);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;">\ud83d\udcf7</button>
+          <button id="gcLeave" class="dole-btn" style="width:60px;height:60px;border-radius:50%;border:none;background:linear-gradient(135deg,#e53e3e,#c53030);color:#fff;font-size:21px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(229,62,62,0.4);">\ud83d\udcde</button>
         </div>
       `;
       document.body.appendChild(groupCallWindow);
       makeResizable(groupCallWindow, 320, 280);
-
-      // Pulse animation (inject once)
-      if (!document.querySelector("#gcPulseStyle")) {
-        const st = document.createElement("style");
-        st.id = "gcPulseStyle";
-        st.textContent = `@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.4)} }`;
-        document.head.appendChild(st);
-      }
 
       // Drag
       const gh = groupCallWindow.querySelector("#gcHeader");
@@ -1545,15 +1705,15 @@
         muted = !muted;
         if (chatController._localStream) chatController._localStream.getAudioTracks().forEach(t => t.enabled = !muted);
         const b = groupCallWindow.querySelector("#gcMute");
-        b.textContent = muted ? "🔇" : "🎤";
-        b.style.background = muted ? "#e53e3e" : "#2d3748";
+        b.textContent = muted ? "🔇" : "🎙️";
+        b.style.background = muted ? "#e53e3e" : "rgba(255,255,255,0.08)";
       });
       groupCallWindow.querySelector("#gcVid").addEventListener("click", () => {
         vidOff = !vidOff;
         if (chatController._localStream) chatController._localStream.getVideoTracks().forEach(t => t.enabled = !vidOff);
         const b = groupCallWindow.querySelector("#gcVid");
         b.textContent = vidOff ? "🚫" : "📷";
-        b.style.background = vidOff ? "#e53e3e" : "#2d3748";
+        b.style.background = vidOff ? "#e53e3e" : "rgba(255,255,255,0.08)";
       });
       groupCallWindow.querySelector("#gcLeave").addEventListener("click", () => chatController.leaveGroupCall());
       groupCallWindow.querySelector("#gcClose").addEventListener("click",  () => chatController.leaveGroupCall());
@@ -1661,8 +1821,35 @@
         }
 
         const wasAtBottom = ctrl.isUserAtBottom();
-        appendMessageToContainer(msgBox, msg, lastMessages.length);
         lastMessages.push(msg);
+        const reaction = parseReaction(String(msg.text || ""));
+        if (reaction) {
+          const targetEl = msgBox.querySelector(`.dole-msg[data-msg-index="${reaction.targetIndex}"][data-msg-user="${CSS.escape(reaction.targetUser)}"]`);
+          if (targetEl) {
+            let reactRow = targetEl.querySelector(".dole-reaction-row");
+            if (!reactRow) {
+              reactRow = document.createElement("div");
+              reactRow.className = "dole-reaction-row";
+              Object.assign(reactRow.style, { display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "2px" });
+              targetEl.appendChild(reactRow);
+            }
+            const reactions = collectReactionsForMessage(lastMessages, reaction.targetIndex, reaction.targetUser);
+            reactRow.innerHTML = "";
+            for (const [emoji, users] of reactions) {
+              const badge = document.createElement("span");
+              badge.className = "dole-reaction-badge" + (users.includes(username) ? " mine" : "");
+              badge.textContent = emoji + " " + users.length;
+              badge.title = users.join(", ");
+              badge.addEventListener("click", () => {
+                const reactText = makeReactMessage(emoji, reaction.targetUser, reaction.targetIndex);
+                ctrl.sendMessage(reactText).catch(() => {});
+              });
+              reactRow.appendChild(badge);
+            }
+          }
+        } else {
+          appendMessageToContainer(msgBox, msg, lastMessages.length - 1, lastMessages, ctrl, username);
+        }
         lastCount = lastMessages.length;
         if (wasAtBottom) { msgBox.scrollTop = msgBox.scrollHeight; newMsgBtn.style.display = "none"; }
         else newMsgBtn.style.display = "block";
@@ -1671,14 +1858,16 @@
 
       async function slowPoll() {
         if (!wsActive || wsPaused) return;
+        const roomAtPollStart = currentRoom;
         try {
           const data = await ctrl.getMessages();
+          if (!wsActive || wsPaused || currentRoom !== roomAtPollStart) return;
           if (!data || !Array.isArray(data.messages)) return;
           const newMessages = data.messages;
           if (newMessages.length !== lastCount) {
             const wasAtBottom = ctrl.isUserAtBottom();
             msgBox.innerHTML = ""; msgBox.appendChild(newMsgBtn);
-            newMessages.forEach((m, i) => appendMessageToContainer(msgBox, m, i));
+            newMessages.forEach((m, i) => appendMessageToContainer(msgBox, m, i, newMessages, ctrl, username));
             lastCount = newMessages.length; lastMessages = newMessages;
             if (wasAtBottom) msgBox.scrollTop = msgBox.scrollHeight;
           }
@@ -1734,6 +1923,7 @@
           case "call-group-invite":
             if (callState) return;
             isGroupCall = true;
+            callState = "incoming";
             callPeer = msg._from;
             activeGroupCallMembers = new Set(msg.members || [msg._from]);
             showIncomingCallBanner(`${msg._from} started a group call`);
@@ -1814,9 +2004,17 @@
 
       function rejectCall() {
         if (callState !== "incoming") return;
-        sendWs({ type: "call-reject", to: callPeer });
-        hideIncomingCallBanner();
-        callState = null; callPeer = null; pendingOffer = null;
+        if (isGroupCall) {
+          sendWs({ type: "call-group-leave" });
+          hideIncomingCallBanner();
+          callState = null; callPeer = null; isGroupCall = false;
+          activeGroupCallMembers.clear();
+          renderUserList();
+        } else {
+          sendWs({ type: "call-reject", to: callPeer });
+          hideIncomingCallBanner();
+          callState = null; callPeer = null; pendingOffer = null;
+        }
       }
 
       function endCall(reason = "ended") {
@@ -1859,12 +2057,16 @@
       async function acceptGroupCall() {
         hideIncomingCallBanner();
         try {
+          const existingMembers = [...activeGroupCallMembers].filter(m => m !== username);
           isGroupCall = true; callState = "active-group";
           _localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
           showGroupCallWindow();
           minifyChat();
           activeGroupCallMembers.add(username);
           sendWs({ type: "call-group-join" }); // everyone in the call hears this and connects
+          for (const member of existingMembers) {
+            await handleNewGroupMember(member);
+          }
         } catch (e) {
           alert("Could not join group call: " + (e && e.message ? e.message : "check camera/mic"));
           callState = null; isGroupCall = false;
@@ -1980,6 +2182,7 @@
 
       const ctrl = {
         get currentUsers()           { return currentUsers; },
+        get callState()              { return callState; },
         get _localStream()           { return _localStream; },
         get activeGroupCallMembers() { return activeGroupCallMembers; },
         startCall,
@@ -2048,7 +2251,7 @@
           if (!data || !Array.isArray(data.messages)) return;
           const wasAtBottom = this.isUserAtBottom();
           msgBox.innerHTML = ""; msgBox.appendChild(newMsgBtn);
-          data.messages.forEach((m, i) => appendMessageToContainer(msgBox, m, i));
+          data.messages.forEach((m, i) => appendMessageToContainer(msgBox, m, i, data.messages, this, username));
           lastCount = data.messages.length; lastMessages = data.messages;
           if (wasAtBottom || forceScroll) msgBox.scrollTop = msgBox.scrollHeight;
         },
@@ -2189,13 +2392,13 @@
     async function switchRoom(newRoomName) {
       if (!newRoomName || !newRoomName.trim()) { alert("Room name required"); return; }
       const trimmed = newRoomName.trim();
-      if (trimmed === currentRoom) { currentRoomDisplay.textContent = `room: ${currentRoom}`; return; }
+      if (trimmed === currentRoom) { currentRoomDisplay.textContent = `# ${currentRoom}`; return; }
       chatController.stop();
       if (box._timeUpdater) { clearInterval(box._timeUpdater); box._timeUpdater = null; }
       msgBox.innerHTML = ""; msgBox.appendChild(newMsgBtn);
       currentRoom = trimmed;
       try { localStorage.setItem("dole_chat_room", currentRoom); } catch (e) {}
-      if (currentRoomDisplay) currentRoomDisplay.textContent = `room: ${currentRoom}`;
+      if (currentRoomDisplay) currentRoomDisplay.textContent = `# ${currentRoom}`;
       addRoomToList(currentRoom);
       chatController = makeWsController();
       box._chatController = chatController;
