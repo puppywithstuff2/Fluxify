@@ -12,9 +12,6 @@
   const REACT_PREFIX = "\u200B\u200D[react:";
   const REACT_SUFFIX = "]\u200D\u200B";
   const REACT_RE = /\u200B\u200D\[react:([^:]+):([^:]+):(\d+)\]\u200D\u200B/;
-  const PFP_PREFIX = "\u200B\u200D[pfp:";
-  const PFP_SUFFIX = "]\u200D\u200B";
-  const PFP_RE = /\u200B\u200D\[pfp:([^\]]+)\]\u200D\u200B/;
   const QUICK_EMOJIS = ["\ud83d\udc4d", "\u2764\ufe0f", "\ud83d\ude02", "\ud83d\ude2e", "\ud83d\ude22", "\ud83d\ude21", "\ud83d\ude4f", "\ud83d\udd25"];
   const IS_TOUCH_DEVICE = (("ontouchstart" in window) || (navigator.maxTouchPoints > 0) || window.matchMedia("(pointer: coarse)").matches);
 
@@ -355,92 +352,10 @@
     return parseReaction(String(m.text || "")) !== null;
   }
 
-  // --- profile picture helpers ---
-  const PFP_STORAGE_KEY = "dole_pfp_cache";
-  let pfpCache = {};
-  function loadPfpCache() {
-    try {
-      const raw = localStorage.getItem(PFP_STORAGE_KEY);
-      if (raw) pfpCache = JSON.parse(raw);
-    } catch (e) { pfpCache = {}; }
-  }
-  function savePfpCache() {
-    try { localStorage.setItem(PFP_STORAGE_KEY, JSON.stringify(pfpCache)); } catch (e) {}
-  }
-  function setPfpForUser(username, url) {
-    pfpCache[username] = url;
-    savePfpCache();
-  }
-  function getPfpForUser(username) {
-    return pfpCache[username] || null;
-  }
-  function makePfpMessage(url) {
-    return PFP_PREFIX + url + PFP_SUFFIX;
-  }
-  function parsePfp(text) {
-    if (typeof text !== "string") return null;
-    const match = text.match(PFP_RE);
-    if (!match) return null;
-    return match[1];
-  }
-  function isPfpMessage(m) {
-    return parsePfp(String(m.text || "")) !== null;
-  }
-  function scanMessagesForPfps(messages) {
-    if (!Array.isArray(messages)) return;
-    for (const m of messages) {
-      const url = parsePfp(String(m.text || ""));
-      if (url && m.username) setPfpForUser(m.username, url);
-    }
-  }
-  loadPfpCache();
-
-  // --- avatar rendering helper ---
-  function renderAvatar(container, username, size) {
-    const sz = size || 28;
-    const pfpUrl = getPfpForUser(username);
-    const hue = [...username].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
-    if (pfpUrl) {
-      const img = document.createElement("img");
-      img.src = pfpUrl;
-      img.alt = username;
-      img.referrerPolicy = "no-referrer";
-      Object.assign(img.style, {
-        width: sz + "px", height: sz + "px", borderRadius: "50%",
-        objectFit: "cover", flexShrink: "0",
-      });
-      img.addEventListener("error", () => {
-        const fallback = document.createElement("div");
-        Object.assign(fallback.style, {
-          width: sz + "px", height: sz + "px", borderRadius: "50%",
-          background: `hsl(${hue}, 55%, 45%)`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: Math.round(sz * 0.46) + "px", fontWeight: "700", color: "#fff",
-          flexShrink: "0", textTransform: "uppercase",
-        });
-        fallback.textContent = username.charAt(0);
-        img.replaceWith(fallback);
-      });
-      container.appendChild(img);
-    } else {
-      const fallback = document.createElement("div");
-      Object.assign(fallback.style, {
-        width: sz + "px", height: sz + "px", borderRadius: "50%",
-        background: `hsl(${hue}, 55%, 45%)`,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: Math.round(sz * 0.46) + "px", fontWeight: "700", color: "#fff",
-        flexShrink: "0", textTransform: "uppercase",
-      });
-      fallback.textContent = username.charAt(0);
-      container.appendChild(fallback);
-    }
-  }
-
   // --- message rendering ---
   function appendMessageToContainer(container, m, i, allMessages, chatController, username) {
     const text = String(m.text || "");
     if (isReactionMessage(m)) return;
-    if (isPfpMessage(m)) return;
 
     const d = document.createElement("div");
     d.className = "dole-msg";
@@ -457,9 +372,18 @@
     const topRow = document.createElement("div");
     Object.assign(topRow.style, { display: "flex", alignItems: "center", gap: "8px" });
 
+    const avatar = document.createElement("div");
     const uname = String(m.username || "unknown");
     const hue = [...uname].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
-    renderAvatar(topRow, uname, 28);
+    Object.assign(avatar.style, {
+      width: "28px", height: "28px", borderRadius: "50%",
+      background: `hsl(${hue}, 55%, 45%)`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: "13px", fontWeight: "700", color: "#fff", flexShrink: "0",
+      textTransform: "uppercase",
+    });
+    avatar.textContent = uname.charAt(0);
+    topRow.appendChild(avatar);
 
     const strong = document.createElement("strong");
     strong.textContent = uname;
@@ -798,7 +722,6 @@
           <div style="font-weight:700; color:#e6eefc; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Dole Chat</div>
           <div id="book_username" style="font-weight:500; color:#7289da; font-size:12px; opacity:0.9;"></div>
         </div>
-        <button id="pfpBtn" title="Profile Picture" class="dole-btn" style="background:rgba(88,101,242,0.15); color:#9fb0e6; border:none; width:34px; height:34px; border-radius:10px; cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden; padding:0;" ></button>
         <button id="callBtn" title="Call" class="dole-btn" style="background:linear-gradient(135deg,#2f855a,#276749); color:white; border:none; width:34px; height:34px; border-radius:10px; cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">\ud83d\udcde</button>
         <button id="closeChat" class="dole-btn" style="background:rgba(255,107,107,0.15); color:#fc8181; border:none; width:34px; height:34px; border-radius:10px; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">\u2715</button>
       </div>
@@ -834,163 +757,6 @@
 
     const usernameSpan = box.querySelector("#book_username");
     if (usernameSpan) usernameSpan.textContent = username;
-
-    // --- Profile picture button setup ---
-    const pfpBtn = box.querySelector("#pfpBtn");
-    function updatePfpButton() {
-      if (!pfpBtn) return;
-      pfpBtn.innerHTML = "";
-      const currentPfp = getPfpForUser(username);
-      if (currentPfp) {
-        const img = document.createElement("img");
-        img.src = currentPfp;
-        img.alt = username;
-        img.referrerPolicy = "no-referrer";
-        Object.assign(img.style, { width: "100%", height: "100%", objectFit: "cover", borderRadius: "10px" });
-        img.addEventListener("error", () => { pfpBtn.textContent = username.charAt(0).toUpperCase(); });
-        pfpBtn.appendChild(img);
-      } else {
-        pfpBtn.textContent = username.charAt(0).toUpperCase();
-      }
-    }
-    updatePfpButton();
-
-    // --- Profile picture panel ---
-    const pfpPanel = document.createElement("div");
-    Object.assign(pfpPanel.style, {
-      display: "none", position: "absolute", top: "0", left: "0", right: "0", bottom: "0",
-      background: "rgba(0,0,0,0.85)", zIndex: "20", flexDirection: "column",
-      alignItems: "center", justifyContent: "center", gap: "16px", padding: "24px",
-      backdropFilter: "blur(8px)", animation: "dole-fadeIn 0.2s ease",
-    });
-    pfpPanel.innerHTML = `
-      <div style="font-weight:700; font-size:18px; color:#e6eefc;">Profile Picture</div>
-      <div id="pfpPreview" style="width:80px; height:80px; border-radius:50%; overflow:hidden; border:2px solid rgba(88,101,242,0.4); display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05);"></div>
-      <input id="pfpUrlInput" class="dole-input" placeholder="Paste image URL..." style="width:100%; max-width:280px; padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); outline:none; font-size:14px; background:rgba(0,0,0,0.4); color:#fff; font-family:inherit;">
-      <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
-        <button id="pfpUploadBtn" class="dole-btn" style="padding:10px 16px; border-radius:10px; border:none; background:#2b6cb0; color:#fff; cursor:pointer; font-size:13px; font-weight:600;">Upload Image</button>
-        <button id="pfpSaveBtn" class="dole-btn" style="padding:10px 16px; border-radius:10px; border:none; background:linear-gradient(135deg,#5865f2,#4752c4); color:#fff; cursor:pointer; font-size:13px; font-weight:600;">Save</button>
-        <button id="pfpRemoveBtn" class="dole-btn" style="padding:10px 16px; border-radius:10px; border:none; background:rgba(255,107,107,0.2); color:#fc8181; cursor:pointer; font-size:13px; font-weight:600;">Remove</button>
-      </div>
-      <button id="pfpCloseBtn" class="dole-btn" style="padding:8px 14px; border-radius:8px; border:none; background:rgba(255,255,255,0.08); color:#aaa; cursor:pointer; font-size:13px;">Cancel</button>
-      <div id="pfpStatus" style="color:#fc8181; font-size:12px; min-height:16px; text-align:center;"></div>
-    `;
-    box.appendChild(pfpPanel);
-
-    const pfpPreview = pfpPanel.querySelector("#pfpPreview");
-    const pfpUrlInput = pfpPanel.querySelector("#pfpUrlInput");
-    const pfpSaveBtn = pfpPanel.querySelector("#pfpSaveBtn");
-    const pfpUploadBtn = pfpPanel.querySelector("#pfpUploadBtn");
-    const pfpRemoveBtn = pfpPanel.querySelector("#pfpRemoveBtn");
-    const pfpCloseBtn = pfpPanel.querySelector("#pfpCloseBtn");
-    const pfpStatus = pfpPanel.querySelector("#pfpStatus");
-
-    function updatePfpPreview() {
-      pfpPreview.innerHTML = "";
-      const url = pfpUrlInput.value.trim();
-      if (url) {
-        const img = document.createElement("img");
-        img.src = url;
-        img.referrerPolicy = "no-referrer";
-        Object.assign(img.style, { width: "100%", height: "100%", objectFit: "cover" });
-        img.addEventListener("error", () => { pfpPreview.innerHTML = ""; pfpPreview.textContent = "?"; });
-        pfpPreview.appendChild(img);
-      } else {
-        const currentPfp = getPfpForUser(username);
-        if (currentPfp) {
-          const img = document.createElement("img");
-          img.src = currentPfp;
-          img.referrerPolicy = "no-referrer";
-          Object.assign(img.style, { width: "100%", height: "100%", objectFit: "cover" });
-          pfpPreview.appendChild(img);
-        } else {
-          pfpPreview.textContent = username.charAt(0).toUpperCase();
-          Object.assign(pfpPreview.style, { fontSize: "32px", fontWeight: "700", color: "#fff" });
-        }
-      }
-    }
-
-    pfpUrlInput.addEventListener("input", updatePfpPreview);
-
-    function showPfpPanel() {
-      pfpUrlInput.value = getPfpForUser(username) || "";
-      pfpStatus.textContent = "";
-      updatePfpPreview();
-      pfpPanel.style.display = "flex";
-    }
-    function hidePfpPanel() {
-      pfpPanel.style.display = "none";
-    }
-
-    pfpBtn.addEventListener("click", showPfpPanel);
-    pfpCloseBtn.addEventListener("click", hidePfpPanel);
-
-    pfpSaveBtn.addEventListener("click", async () => {
-      const url = pfpUrlInput.value.trim();
-      if (!url) { pfpStatus.textContent = "Enter an image URL or upload an image."; return; }
-      try { new URL(url); } catch (e) { pfpStatus.textContent = "Invalid URL."; return; }
-      setPfpForUser(username, url);
-      updatePfpButton();
-      pfpStatus.style.color = "#68d391";
-      pfpStatus.textContent = "Saved! Broadcasting to chat...";
-      try {
-        await chatController.sendMessage(makePfpMessage(url));
-        pfpStatus.textContent = "Profile picture updated!";
-      } catch (e) {
-        pfpStatus.textContent = "Saved locally. Broadcast failed.";
-      }
-      setTimeout(hidePfpPanel, 1200);
-    });
-
-    pfpRemoveBtn.addEventListener("click", async () => {
-      delete pfpCache[username];
-      savePfpCache();
-      pfpUrlInput.value = "";
-      updatePfpPreview();
-      updatePfpButton();
-      pfpStatus.style.color = "#68d391";
-      pfpStatus.textContent = "Profile picture removed.";
-      setTimeout(hidePfpPanel, 800);
-    });
-
-    // Profile picture file upload
-    const pfpFileInput = document.createElement("input");
-    pfpFileInput.type = "file"; pfpFileInput.accept = "image/*"; pfpFileInput.style.display = "none";
-    box.appendChild(pfpFileInput);
-
-    pfpUploadBtn.addEventListener("click", () => { pfpFileInput.click(); });
-    pfpFileInput.addEventListener("change", async () => {
-      const file = pfpFileInput.files && pfpFileInput.files[0];
-      if (!file) return;
-      pfpStatus.style.color = "#fc8181";
-      if (!sessionImgBBKey) {
-        const key = prompt("Enter your ImgBB API key to upload images:");
-        if (!key || !key.trim()) { pfpStatus.textContent = "Upload requires an ImgBB key."; pfpFileInput.value = ""; return; }
-        sessionImgBBKey = key.trim();
-        await saveKeyToAccount(token, sessionImgBBKey);
-      }
-      pfpUploadBtn.disabled = true;
-      pfpUploadBtn.textContent = "Uploading...";
-      try {
-        const fd = new FormData(); fd.append("file", file); fd.append("key", sessionImgBBKey);
-        const res = await fetchWithTimeout(IMAGE_UPLOAD_WORKER, { method: "POST", body: fd }, 120000);
-        if (!res.ok) throw new Error("Upload error: " + res.status);
-        const data = await res.json().catch(() => null);
-        const uploadedUrl = data && (data.url || (data.data && data.data.url));
-        if (!uploadedUrl) throw new Error("No URL returned");
-        pfpUrlInput.value = uploadedUrl;
-        updatePfpPreview();
-        pfpStatus.style.color = "#68d391";
-        pfpStatus.textContent = "Uploaded! Click Save to apply.";
-      } catch (e) {
-        pfpStatus.style.color = "#fc8181";
-        pfpStatus.textContent = "Upload failed: " + (e.message || "unknown");
-      } finally {
-        pfpUploadBtn.disabled = false;
-        pfpUploadBtn.textContent = "Upload Image";
-        pfpFileInput.value = "";
-      }
-    });
 
     const msgBox = box.querySelector("#chatMessages");
     const chatInputEl = box.querySelector("#chatInput");
@@ -1360,7 +1126,14 @@
           borderRadius: "10px", background: "rgba(255,255,255,0.03)",
           border: "1px solid rgba(255,255,255,0.04)",
         });
-        renderAvatar(row, u, 40);
+        const avatar = document.createElement("div");
+        Object.assign(avatar.style, {
+          width: "40px", height: "40px", borderRadius: "50%", background: "#5865f2",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "18px", fontWeight: "700", color: "#fff", flexShrink: "0",
+        });
+        avatar.textContent = u.charAt(0).toUpperCase();
+        row.appendChild(avatar);
         const name = document.createElement("div");
         name.style.flex = "1"; name.style.fontWeight = "600";
         name.style.fontSize = "15px"; name.style.color = "#e6eefc";
@@ -2246,14 +2019,6 @@
           recentMsgIds.delete(recentMsgIds.values().next().value);
         }
 
-        const pfpUrl = parsePfp(String(msg.text || ""));
-        if (pfpUrl && msg.username) {
-          setPfpForUser(msg.username, pfpUrl);
-          lastMessages.push(msg);
-          lastCount = lastMessages.length;
-          return;
-        }
-
         const wasAtBottom = ctrl.isUserAtBottom();
         lastMessages.push(msg);
         const reaction = parseReaction(String(msg.text || ""));
@@ -2298,7 +2063,6 @@
           if (!wsActive || wsPaused || controllerRoom !== roomAtPollStart || currentRoom !== controllerRoom) return;
           if (!data || !Array.isArray(data.messages)) return;
           const newMessages = data.messages;
-          scanMessagesForPfps(newMessages);
           if (newMessages.length !== lastCount) {
             const wasAtBottom = ctrl.isUserAtBottom();
             msgBox.innerHTML = ""; msgBox.appendChild(newMsgBtn);
@@ -2707,7 +2471,6 @@
           let data;
           try { data = await this.getMessages(); } catch (e) { return; }
           if (!data || !Array.isArray(data.messages)) return;
-          scanMessagesForPfps(data.messages);
           const wasAtBottom = this.isUserAtBottom();
           msgBox.innerHTML = ""; msgBox.appendChild(newMsgBtn);
           data.messages.forEach((m, i) => appendMessageToContainer(msgBox, m, i, data.messages, this, username));
