@@ -1139,8 +1139,12 @@
       });
       icon.title = "Restore Chat";
       icon.innerText = "\u2709";
+      // Block clicks briefly so the pointerup from the minimize button
+      // doesn't immediately re-open the chat (icon spawns in same spot)
+      icon.style.pointerEvents = "none";
       document.body.appendChild(icon);
       registerEl(icon);
+      setTimeout(() => { if (icon.isConnected) icon.style.pointerEvents = ""; }, 400);
       icon.onclick = () => {
         removeEl(icon); minIcon = null;
         box.style.display = "flex";
