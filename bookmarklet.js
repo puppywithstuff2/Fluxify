@@ -1135,6 +1135,7 @@
         boxShadow: "0 8px 24px rgba(88,101,242,0.4)",
         fontSize: "22px", touchAction: "manipulation",
         animation: "dole-fadeIn 0.2s ease",
+        pointerEvents: "none",  // block the in-flight click from the minimise button
       });
       icon.title = "Restore Chat";
       icon.innerText = "\u2709";
@@ -1147,6 +1148,8 @@
         chatController.loadMessagesOnce().catch(() => {});
       };
       makeDraggable(icon, { threshold: 6 });
+      // Re-enable pointer events after the tap/click that triggered minimise has fully settled
+      setTimeout(() => { if (icon.isConnected) icon.style.pointerEvents = ""; }, 400);
       return icon;
     }
 
