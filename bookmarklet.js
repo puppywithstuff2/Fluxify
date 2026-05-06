@@ -1,4 +1,4 @@
-  (function() {
+(function() {
 (async () => {
   const CHAT_BASE = "https://dolegpt2.anonymousguy.workers.dev";
   const ACCOUNT_BASE = "https://account-worker.anonymousguy.workers.dev";
@@ -1043,10 +1043,7 @@
     userListPanel.innerHTML = `
       <div style="padding:14px 16px; background:#0d0e10; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.04);">
         <div style="font-weight:700; font-size:15px; color:#e6eefc;">📞 Call Someone</div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <button id="startGroupCallBtn" style="padding:8px 14px; border-radius:8px; border:none; background:#5865f2; color:#fff; cursor:pointer; font-size:13px; font-weight:600; min-height:44px;">Group Call</button>
-          <button id="closeUserList" style="background:#333; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:14px; min-width:44px; min-height:44px;">✕</button>
-        </div>
+        <button id="closeUserList" style="background:#333; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:14px; min-width:44px; min-height:44px;">✕</button>
       </div>
       <div id="userListInner" style="padding:12px; display:flex; flex-direction:column; gap:10px; overflow-y:auto; max-height:280px; -webkit-overflow-scrolling:touch;"></div>
       <div id="userListEmpty" style="padding:20px; text-align:center; font-size:14px; color:#9fb0e6; opacity:0.8; display:none;">No other users online right now.</div>
@@ -1056,64 +1053,12 @@
     function renderUserList() {
       const inner = userListPanel.querySelector("#userListInner");
       const empty = userListPanel.querySelector("#userListEmpty");
-      const startGroupBtn = userListPanel.querySelector("#startGroupCallBtn");
       const users = chatController ? chatController.currentUsers : [];
-      const activeGroupCallMembers = chatController ? chatController.activeGroupCallMembers : null;
-      const callState = chatController ? chatController.callState : null;
-      const inActiveGroupCall = callState === "active-group";
-      const hasOngoingGroupCall = !!(activeGroupCallMembers && activeGroupCallMembers.size > 0);
-      if (startGroupBtn) {
-        startGroupBtn.textContent = inActiveGroupCall ? "In Group Call" : (hasOngoingGroupCall ? "Join Group" : "Group Call");
-      }
       inner.innerHTML = "";
 
-      // ── Active group call banner ──────────────────────────────────────────
-      if (hasOngoingGroupCall) {
-        const banner = document.createElement("div");
-        Object.assign(banner.style, {
-          display: "flex", flexDirection: "column", gap: "8px",
-          padding: "12px", borderRadius: "10px",
-          background: "linear-gradient(135deg, rgba(88,101,242,0.18), rgba(47,133,90,0.14))",
-          border: "1px solid rgba(88,101,242,0.35)",
-          marginBottom: "4px",
-        });
-        const memberList = [...activeGroupCallMembers].slice(0, 4).join(", ")
-          + (activeGroupCallMembers.size > 4 ? ` +${activeGroupCallMembers.size - 4} more` : "");
-        const titleText = inActiveGroupCall ? "You are in the room group call" : "Group call in progress";
-        banner.innerHTML = `
-          <div style="display:flex; align-items:center; gap:8px;">
-            <div style="width:8px; height:8px; border-radius:50%; background:#68d391; animation:dole-pulse 1.5s infinite;"></div>
-            <div style="font-weight:700; font-size:14px; color:#e6eefc;">${titleText}</div>
-          </div>
-          <div style="font-size:12px; color:#9fb0e6;">${memberList}</div>
-        `;
-        if (!inActiveGroupCall) {
-          const joinBtn = document.createElement("button");
-          Object.assign(joinBtn.style, {
-            padding: "12px", borderRadius: "10px", border: "none",
-            background: "#5865f2", color: "#fff", cursor: "pointer",
-            fontSize: "14px", fontWeight: "700", minHeight: "44px",
-          });
-          joinBtn.textContent = "Join group call";
-          joinBtn.addEventListener("click", () => {
-            hideUserList();
-            chatController.acceptGroupCall();
-          });
-          banner.appendChild(joinBtn);
-        }
-
-        inner.appendChild(banner);
-      }
-
-      // ── Individual call buttons ───────────────────────────────────────────
       if (!users || users.length === 0) {
-        if (inner.children.length === 0) {
-          inner.style.display = "none";
-          empty.style.display = "block";
-        } else {
-          inner.style.display = "flex";
-          empty.style.display = "none";
-        }
+        inner.style.display = "none";
+        empty.style.display = "block";
         return;
       }
       inner.style.display = "flex";
@@ -1168,13 +1113,6 @@
       setTimeout(() => { if (!userListVisible) userListPanel.style.display = "none"; }, 260);
     }
     userListPanel.querySelector("#closeUserList").addEventListener("click", hideUserList);
-    userListPanel.querySelector("#startGroupCallBtn").addEventListener("click", () => {
-      hideUserList();
-      const members = chatController ? chatController.activeGroupCallMembers : null;
-      const inGroup = chatController && chatController.callState === "active-group";
-      if (!inGroup && members && members.size > 0) chatController.acceptGroupCall();
-      else chatController.startGroupCall();
-    });
 
     callBtn.addEventListener("click", () => {
       if (userListVisible) hideUserList(); else showUserList();
@@ -1667,244 +1605,7 @@
       return null;
     }
 
-    // --- Group Call Window & Tile Management ---
-    let groupCallWindow = null;
-    let groupRemoteAudioMuted = false;
-    let groupRemoteVolume = 1;
-
-    function createVideoTile(peerId, label, muted = false) {
-      const tile = document.createElement("div");
-      tile.id = "tile-" + peerId;
-      if (peerId !== "local") tile.dataset.peer = peerId;
-      Object.assign(tile.style, {
-        position: "relative", background: "#1a1b1e", borderRadius: "6px",
-        overflow: "hidden", minHeight: "0", // critical for grid fill
-      });
-      const vid = document.createElement("video");
-      vid.autoplay = true; vid.playsInline = true;
-      if (muted) vid.muted = true;
-      Object.assign(vid.style, {
-        position: "absolute", inset: "0",
-        width: "100%", height: "100%",
-        objectFit: "cover", display: "block", background: "#000",
-      });
-      tile.appendChild(vid);
-
-      // Avatar placeholder shown while video is loading/off
-      const avatarEl = document.createElement("div");
-      Object.assign(avatarEl.style, {
-        position: "absolute", inset: "0",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        background: "#1a1b1e", fontSize: "32px", color: "#555", zIndex: 1,
-      });
-      avatarEl.textContent = label.charAt(0).toUpperCase();
-      avatarEl.id = "avatar-" + peerId;
-      tile.appendChild(avatarEl);
-
-      vid.addEventListener("play",    () => { avatarEl.style.display = "none"; });
-      vid.addEventListener("emptied", () => { avatarEl.style.display = "flex"; });
-
-      const nameTag = document.createElement("div");
-      Object.assign(nameTag.style, {
-        position: "absolute", bottom: "8px", left: "8px", zIndex: 2,
-        background: "rgba(0,0,0,0.6)", color: "#fff",
-        fontSize: "11px", padding: "3px 8px", borderRadius: "4px",
-        backdropFilter: "blur(4px)",
-      });
-      nameTag.textContent = label;
-      tile.appendChild(nameTag);
-
-      if (peerId !== "local") {
-        const volWrap = document.createElement("div");
-        Object.assign(volWrap.style, {
-          position: "absolute", right: "8px", bottom: "8px", zIndex: 2,
-          background: "rgba(0,0,0,0.65)", borderRadius: "8px",
-          padding: "2px 6px", display: "flex", alignItems: "center", gap: "4px",
-        });
-        const icon = document.createElement("span");
-        icon.textContent = "🔊";
-        icon.style.fontSize = "10px";
-        const slider = document.createElement("input");
-        slider.type = "range";
-        slider.min = "0";
-        slider.max = "100";
-        slider.value = String(Math.round(groupRemoteVolume * 100));
-        Object.assign(slider.style, {
-          width: "62px",
-          accentColor: "#5865f2",
-          cursor: "pointer",
-        });
-        slider.addEventListener("input", () => {
-          groupRemoteVolume = Math.max(0, Math.min(1, Number(slider.value) / 100));
-          vid.volume = groupRemoteVolume;
-        });
-        volWrap.appendChild(icon);
-        volWrap.appendChild(slider);
-        tile.appendChild(volWrap);
-      }
-      return tile;
-    }
-
-    function applyGroupRemoteAudioState() {
-      if (!groupCallWindow) return;
-      const remoteVideos = groupCallWindow.querySelectorAll("#gcVideoGrid [data-peer] video");
-      for (const v of remoteVideos) {
-        v.muted = groupRemoteAudioMuted;
-        v.volume = groupRemoteVolume;
-      }
-    }
-
-    function updateGridLayout() {
-      if (!groupCallWindow) return;
-      const grid = groupCallWindow.querySelector("#gcVideoGrid");
-      if (!grid) return;
-      const n = grid.children.length;
-
-      let cols, rows;
-      if      (n === 1) { cols = 1; rows = 1; }
-      else if (n === 2) { cols = 2; rows = 1; }
-      else if (n <= 4)  { cols = 2; rows = 2; }
-      else if (n <= 6)  { cols = 3; rows = 2; }
-      else if (n <= 9)  { cols = 3; rows = 3; }
-      else              { cols = 4; rows = Math.ceil(n / 4); }
-
-      grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-      grid.style.gridTemplateRows    = `repeat(${rows}, 1fr)`;
-      grid.style.padding = n === 1 ? "0" : "3px";
-      grid.style.gap     = n === 1 ? "0" : "3px";
-
-      const countEl = groupCallWindow.querySelector("#gcCount");
-      if (countEl) countEl.textContent = `${n} participant${n !== 1 ? "s" : ""}`;
-    }
-
-    function addLocalTile() {
-      if (!groupCallWindow) return;
-      const grid = groupCallWindow.querySelector("#gcVideoGrid");
-      if (grid.querySelector("#tile-local")) return;
-      const tile = createVideoTile("local", username + " (you)", true);
-      grid.appendChild(tile);
-      const vid = tile.querySelector("video");
-      if (chatController && chatController._localStream) {
-        vid.srcObject = chatController._localStream;
-        vid.play().catch(() => {});
-      }
-      updateGridLayout();
-    }
-
-    function addPeerTile(peerName, stream) {
-      if (!groupCallWindow) return null;
-      removePeerTile(peerName);
-      const grid = groupCallWindow.querySelector("#gcVideoGrid");
-      const tile = createVideoTile(peerName, peerName, false);
-      if (stream) {
-        const vid = tile.querySelector("video");
-        vid.srcObject = stream;
-        vid.muted = groupRemoteAudioMuted;
-        vid.volume = groupRemoteVolume;
-        vid.play().catch(() => {});
-      }
-      grid.appendChild(tile);
-      updateGridLayout();
-      applyGroupRemoteAudioState();
-      return tile.querySelector("video");
-    }
-
-    function removePeerTile(peerName) {
-      if (!groupCallWindow) return;
-      const grid = groupCallWindow.querySelector("#gcVideoGrid");
-      const el = grid.querySelector(`[data-peer="${CSS.escape(peerName)}"]`);
-      if (el) el.remove();
-      updateGridLayout();
-    }
-
-    function showGroupCallWindow() {
-      if (groupCallWindow) { try { groupCallWindow.remove(); } catch (e) {} }
-      groupRemoteAudioMuted = false;
-      groupRemoteVolume = 1;
-      groupCallWindow = document.createElement("div");
-      Object.assign(groupCallWindow.style, {
-        position: "fixed", top: "20px", left: "20px",
-        width: "min(96vw, 720px)", height: "min(92vh, 600px)",
-        background: "linear-gradient(180deg, #0d0e12, #08090c)", borderRadius: "20px", zIndex: 1000001,
-        display: "flex", flexDirection: "column", overflow: "hidden",
-        boxShadow: "0 24px 64px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.06)",
-        fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
-        animation: "dole-fadeIn 0.3s ease",
-      });
-      groupCallWindow.innerHTML = `
-        <div id="gcHeader" style="padding:10px 16px; background:rgba(0,0,0,0.3); display:flex; align-items:center; gap:10px; cursor:grab; user-select:none; flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.04);">
-          <div style="width:8px; height:8px; border-radius:50%; background:#68d391; flex-shrink:0; animation:dole-pulse 1.5s infinite;"></div>
-          <div style="font-weight:700; font-size:14px; color:#e6eefc; flex:1;">Group Call</div>
-          <div id="gcCount" style="font-size:12px; color:#9fb0e6;">1 participant</div>
-          <button id="gcClose" class="dole-btn" style="background:rgba(255,255,255,0.06); border:none; width:34px; height:34px; border-radius:10px; cursor:pointer; color:#9fb0e6; font-size:13px; display:flex; align-items:center; justify-content:center; margin-left:8px;">\u2715</button>
-        </div>
-        <div id="gcVideoGrid" style="flex:1; display:grid; gap:3px; padding:3px; background:#000; overflow:hidden; align-items:stretch; justify-items:stretch;"></div>
-        <div style="padding:12px 16px; background:rgba(0,0,0,0.3); display:flex; gap:10px; justify-content:center; align-items:center; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.04);">
-          <button id="gcMute" class="dole-btn" style="width:48px;height:48px;border-radius:50%;border:none;background:rgba(255,255,255,0.08);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;">\ud83c\udf99\ufe0f</button>
-          <button id="gcVid" class="dole-btn" style="width:48px;height:48px;border-radius:50%;border:none;background:rgba(255,255,255,0.08);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;">\ud83d\udcf7</button>
-          <button id="gcLeave" class="dole-btn" style="width:60px;height:60px;border-radius:50%;border:none;background:linear-gradient(135deg,#e53e3e,#c53030);color:#fff;font-size:21px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(229,62,62,0.4);">\ud83d\udcde</button>
-        </div>
-      `;
-      document.body.appendChild(groupCallWindow);
-      makeResizable(groupCallWindow, 320, 280);
-
-      // Drag
-      const gh = groupCallWindow.querySelector("#gcHeader");
-      let drag = false, ox = 0, oy = 0;
-      gh.addEventListener("pointerdown", e => {
-        if (e.target.tagName === "BUTTON") return;
-        drag = true;
-        ox = e.clientX - groupCallWindow.getBoundingClientRect().left;
-        oy = e.clientY - groupCallWindow.getBoundingClientRect().top;
-        gh.setPointerCapture(e.pointerId);
-      });
-      gh.addEventListener("pointermove", e => {
-        if (!drag) return;
-        groupCallWindow.style.left = Math.max(0, Math.min(window.innerWidth  - groupCallWindow.offsetWidth,  e.clientX - ox)) + "px";
-        groupCallWindow.style.top  = Math.max(0, Math.min(window.innerHeight - groupCallWindow.offsetHeight, e.clientY - oy)) + "px";
-        e.preventDefault();
-      });
-      gh.addEventListener("pointerup", () => drag = false);
-
-      let muted = false, vidOff = false, deafened = false;
-      groupCallWindow.querySelector("#gcMute").addEventListener("click", () => {
-        muted = !muted;
-        if (chatController._localStream) chatController._localStream.getAudioTracks().forEach(t => t.enabled = !muted);
-        const b = groupCallWindow.querySelector("#gcMute");
-        b.textContent = muted ? "🔇" : "🎙️";
-        b.style.background = muted ? "#e53e3e" : "rgba(255,255,255,0.08)";
-      });
-      groupCallWindow.querySelector("#gcVid").addEventListener("click", () => {
-        vidOff = !vidOff;
-        if (chatController._localStream) chatController._localStream.getVideoTracks().forEach(t => t.enabled = !vidOff);
-        const b = groupCallWindow.querySelector("#gcVid");
-        b.textContent = vidOff ? "🚫" : "📷";
-        b.style.background = vidOff ? "#e53e3e" : "rgba(255,255,255,0.08)";
-      });
-      const deafenBtn = document.createElement("button");
-      deafenBtn.id = "gcDeafen";
-      deafenBtn.className = "dole-btn";
-      Object.assign(deafenBtn.style, {
-        width: "48px", height: "48px", borderRadius: "50%", border: "none",
-        background: "rgba(255,255,255,0.08)", color: "#fff", fontSize: "18px",
-        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-        transition: "background 0.2s"
-      });
-      deafenBtn.textContent = "🔈";
-      const leaveBtn = groupCallWindow.querySelector("#gcLeave");
-      leaveBtn.parentNode.insertBefore(deafenBtn, leaveBtn);
-      deafenBtn.addEventListener("click", () => {
-        deafened = !deafened;
-        groupRemoteAudioMuted = deafened;
-        applyGroupRemoteAudioState();
-        deafenBtn.textContent = deafened ? "🔇" : "🔈";
-        deafenBtn.style.background = deafened ? "#e53e3e" : "rgba(255,255,255,0.08)";
-      });
-      groupCallWindow.querySelector("#gcLeave").addEventListener("click", () => chatController.leaveGroupCall());
-      groupCallWindow.querySelector("#gcClose").addEventListener("click",  () => chatController.leaveGroupCall());
-
-      addLocalTile();
-    }
+    // --- Group call window removed ---
 
     // --- WebSocket + Chat Controller ---
     function makeWsController() {
@@ -1927,10 +1628,7 @@
       let peerConnection = null;
       let _localStream = null;
       let pendingOffer = null;
-      let isGroupCall = false;
-      let groupPeers  = new Map(); // username → { pc, stream, videoEl }
-      let activeGroupCallMembers = new Set();
-      let groupAnnounceTimer = null;
+      let callTimeoutTimer = null;
 
       function inferSender(msg) {
         if (!msg || typeof msg !== "object") return "";
@@ -1944,11 +1642,23 @@
       }
 
       const ICE_SERVERS = [
-        { urls: "stun:stun.relay.metered.ca:80" },
-        { urls: "turn:global.relay.metered.ca:80", username: "951956895909a9291fb1adb3", credential: "EGUb/agb91aFy24M" },
-        { urls: "turn:global.relay.metered.ca:80?transport=tcp", username: "951956895909a9291fb1adb3", credential: "EGUb/agb91aFy24M" },
-        { urls: "turn:global.relay.metered.ca:443", username: "951956895909a9291fb1adb3", credential: "EGUb/agb91aFy24M" },
-        { urls: "turns:global.relay.metered.ca:443?transport=tcp", username: "951956895909a9291fb1adb3", credential: "EGUb/agb91aFy24M" },
+        { urls: "stun:stun.cloudflare.com:3478" },
+        {
+          urls: "turn:turn.cloudflare.com:3478?transport=udp",
+          username: "abb043552906a36f182d61cbd6e3d05b",
+          credential: "948b39d7de9879bd12dce207867ec99e6aa9ec3dadeab1d6452ac47375da3a1a"
+        },
+        {
+          urls: "turn:turn.cloudflare.com:3478?transport=tcp",
+          username: "abb043552906a36f182d61cbd6e3d05b",
+          credential: "948b39d7de9879bd12dce207867ec99e6aa9ec3dadeab1d6452ac47375da3a1a"
+        },
+        {
+          urls: "turns:turn.cloudflare.com:5349?transport=tcp",
+          username: "abb043552906a36f182d61cbd6e3d05b",
+          credential: "948b39d7de9879bd12dce207867ec99e6aa9ec3dadeab1d6452ac47375da3a1a"
+        },
+        { urls: "stun:stun.l.google.com:19302" }
       ];
 
       async function connectWs() {
@@ -1989,6 +1699,26 @@
         if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
         wsReconnectTimer = setTimeout(() => { wsReconnectDelay = Math.min(wsReconnectDelay * 1.5, WS_RECONNECT_MAX); connectWs(); }, wsReconnectDelay);
       }
+
+      // iPad / iOS Safari: reconnect WebSocket when tab becomes visible again
+      function onVisibilityChange() {
+        if (document.visibilityState === "visible" && wsActive && !wsPaused) {
+          const state = ws ? ws.readyState : WebSocket.CLOSED;
+          if (state === WebSocket.CLOSED || state === WebSocket.CLOSING) {
+            wsReconnectDelay = WS_RECONNECT_BASE;
+            connectWs();
+          }
+        }
+      }
+      function onPageShow(e) {
+        // persisted = true means page was restored from bfcache (iOS Safari)
+        if (e.persisted && wsActive && !wsPaused) {
+          wsReconnectDelay = WS_RECONNECT_BASE;
+          connectWs();
+        }
+      }
+      document.addEventListener("visibilitychange", onVisibilityChange);
+      window.addEventListener("pageshow", onPageShow);
 
       function sendWs(data) {
         if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify(data)); return true; }
@@ -2078,92 +1808,27 @@
         const fromUser = inferSender(msg);
         switch (msg.type) {
           case "call-offer":
-            if (!fromUser) return;
-            if (isGroupCall) { handleGroupOffer(fromUser, msg.sdp); return; }
-            if (callState) return;
+            if (!fromUser || callState) return;
             callState = "incoming"; callPeer = fromUser; pendingOffer = msg.sdp;
             showIncomingCallBanner(fromUser);
             break;
 
           case "call-answer":
-            if (!fromUser) return;
-            if (isGroupCall) {
-              const pd = groupPeers.get(fromUser);
-              if (pd && pd.pc) pd.pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: msg.sdp }))
-                .then(() => { if (pd.pc._flushIce) pd.pc._flushIce(); })
-                .catch(e => console.error("group answer:", e));
-              return;
-            }
-            if (callState === "outgoing" && peerConnection) {
-              peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: msg.sdp }))
-                .then(() => { if (peerConnection._flushIce) peerConnection._flushIce(); })
-                .catch(e => console.error("setRemoteDescription (answer):", e));
-            }
+            if (!fromUser || callState !== "outgoing" || !peerConnection) return;
+            peerConnection.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: msg.sdp }))
+              .then(() => { if (peerConnection._flushIce) peerConnection._flushIce(); })
+              .catch(e => console.error("setRemoteDescription (answer):", e));
             break;
 
           case "call-ice":
-            if (!fromUser) return;
-            if (isGroupCall) {
-              const pd = groupPeers.get(fromUser);
-              if (pd && pd.pc && msg.candidate) {
-                if (pd.pc._queueOrAddIce) pd.pc._queueOrAddIce(msg.candidate);
-                else pd.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(() => {});
-              }
-              return;
-            }
-            if (peerConnection && msg.candidate) {
-              if (peerConnection._queueOrAddIce) peerConnection._queueOrAddIce(msg.candidate);
-              else peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(e => console.error(e));
-            }
+            if (!fromUser || !peerConnection || !msg.candidate) return;
+            if (peerConnection._queueOrAddIce) peerConnection._queueOrAddIce(msg.candidate);
+            else peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(e => console.error(e));
             break;
 
           case "call-end":
           case "call-reject":
-            if (isGroupCall) { if (fromUser) handleGroupPeerLeft(fromUser); return; }
             endCall(msg.type === "call-reject" ? "rejected" : "ended");
-            break;
-
-          case "call-group-invite":
-            if (!fromUser) return;
-            if (callState) return;
-            isGroupCall = true;
-            callState = "incoming";
-            callPeer = fromUser;
-            activeGroupCallMembers = new Set(msg.members || [fromUser]);
-            showIncomingCallBanner(`${fromUser} started a group call`);
-            renderUserList();
-            break;
-
-          case "call-group-join":
-            if (!fromUser) return;
-            if (!isGroupCall || !callState) return;
-            if (fromUser === username) return;
-            activeGroupCallMembers.add(fromUser);
-            handleNewGroupMember(fromUser);
-            // Announce updated member list so any future joiner sees full picture
-            sendWs({ type: "call-group-announce", members: [...activeGroupCallMembers, username] });
-            break;
-
-          case "call-group-leave":
-            if (!fromUser) return;
-            if (isGroupCall) {
-              handleGroupPeerLeft(fromUser);
-              activeGroupCallMembers.delete(fromUser);
-            } else {
-              activeGroupCallMembers.delete(fromUser);
-              renderUserList();
-            }
-            break;
-
-          case "call-group-announce":
-            activeGroupCallMembers = new Set(msg.members || []);
-            activeGroupCallMembers.delete(username);
-            if (!callState) renderUserList(); // refresh panel to show join button
-            break;
-
-          case "call-group-ended":
-            activeGroupCallMembers.clear();
-            if (!callState) renderUserList();
             break;
         }
       }
@@ -2182,6 +1847,12 @@
           sendWs({ type: "call-offer", to: targetUsername, sdp: offer.sdp });
           showCallWindow(targetUsername, _localStream);
           minifyChat();
+          // School-WiFi timeout: if ICE not connected within 20s, show advice
+          callTimeoutTimer = setTimeout(() => {
+            if (callState === "outgoing" || (peerConnection && peerConnection.iceConnectionState === "checking")) {
+              updateCallStatus("⚠️ Slow connection — may be blocked by network");
+            }
+          }, 20000);
         } catch (e) { console.error("startCall error", e); endCall("error"); }
       }
 
@@ -2214,147 +1885,25 @@
 
       function rejectCall() {
         if (callState !== "incoming") return;
-        if (isGroupCall) {
-          sendWs({ type: "call-group-leave" });
-          hideIncomingCallBanner();
-          callState = null; callPeer = null; isGroupCall = false;
-          activeGroupCallMembers.clear();
-          renderUserList();
-        } else {
-          sendWs({ type: "call-reject", to: callPeer });
-          hideIncomingCallBanner();
-          callState = null; callPeer = null; pendingOffer = null;
-        }
+        sendWs({ type: "call-reject", to: callPeer });
+        hideIncomingCallBanner();
+        callState = null; callPeer = null; pendingOffer = null;
       }
 
       function endCall(reason = "ended") {
+        if (callTimeoutTimer) { clearTimeout(callTimeoutTimer); callTimeoutTimer = null; }
         if (callPeer && callState && callState !== "ended") sendWs({ type: "call-end", to: callPeer });
         if (peerConnection) { try { peerConnection.close(); } catch (e) {} peerConnection = null; }
         if (_localStream) { _localStream.getTracks().forEach(t => t.stop()); _localStream = null; }
         callState = null; callPeer = null; pendingOffer = null;
         hideCallWindow();
         hideIncomingCallBanner();
-        if (wsPaused) closeWs(); // now safe to close — call is done, chat is still minified
-      }
-
-      // --- Group call helpers ---
-      function shouldOffer(myUser, theirUser) {
-        return myUser < theirUser; // consistent on both sides — prevents offer collision
-      }
-
-      async function startGroupCall() {
-        if (callState) { alert("Already in a call"); return; }
-        if (activeGroupCallMembers.size > 0) {
-          alert("A group call is already running in this room. Join it from the call panel.");
-          return;
-        }
-        try {
-          isGroupCall = true; callState = "active-group";
-          _localStream = await getPreferredLocalMedia();
-          if (_localStream.getAudioTracks().length === 0) alert("Mic not available. Group call will be listen-only.");
-          if (_localStream.getVideoTracks().length === 0) alert("Camera not available. Group call will be audio-only.");
-          showGroupCallWindow();
-          minifyChat();
-          activeGroupCallMembers.add(username);
-          sendWs({ type: "call-group-invite", members: [...activeGroupCallMembers] });
-          sendWs({ type: "call-group-announce", members: [...activeGroupCallMembers] });
-          // Beacon every 8s so late-joiners see the call in the panel
-          groupAnnounceTimer = setInterval(() => {
-            if (callState === "active-group") {
-              sendWs({ type: "call-group-announce", members: [...activeGroupCallMembers] });
-            }
-          }, 8000);
-        } catch (e) {
-          alert("Could not start group call: " + (e && e.message ? e.message : "check camera/mic"));
-          callState = null; isGroupCall = false;
-        }
-      }
-
-      async function acceptGroupCall() {
-        if (callState && callState !== "incoming" && callState !== "active-group") {
-          alert("Finish your current call before joining the group call.");
-          return;
-        }
-        hideIncomingCallBanner();
-        try {
-          const existingMembers = [...activeGroupCallMembers].filter(m => m !== username);
-          isGroupCall = true; callState = "active-group";
-          _localStream = await getPreferredLocalMedia();
-          if (_localStream.getAudioTracks().length === 0) alert("Mic not available. Group call will be listen-only.");
-          if (_localStream.getVideoTracks().length === 0) alert("Camera not available. Group call will be audio-only.");
-          showGroupCallWindow();
-          minifyChat();
-          activeGroupCallMembers.add(username);
-          sendWs({ type: "call-group-join" }); // everyone in the call hears this and connects
-          for (const member of existingMembers) {
-            await handleNewGroupMember(member);
-          }
-        } catch (e) {
-          alert("Could not join group call: " + (e && e.message ? e.message : "check camera/mic"));
-          callState = null; isGroupCall = false;
-        }
-      }
-
-      async function handleNewGroupMember(peerName) {
-        if (groupPeers.has(peerName)) return;
-        groupPeers.set(peerName, { pc: null, stream: null, videoEl: null });
-        if (shouldOffer(username, peerName)) {
-          const pc = createPeerConnection(peerName);
-          groupPeers.get(peerName).pc = pc;
-          if (_localStream) _localStream.getTracks().forEach(t => pc.addTrack(t, _localStream));
-          try {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            sendWs({ type: "call-offer", to: peerName, sdp: offer.sdp });
-          } catch (e) { console.error("group offer error:", e); }
-        }
-        // else: wait — the other side will offer us (they apply the same rule)
-      }
-
-      async function handleGroupOffer(peerName, sdp) {
-        if (!isGroupCall || !callState) return;
-        let pd = groupPeers.get(peerName);
-        if (!pd) { pd = { pc: null, stream: null, videoEl: null }; groupPeers.set(peerName, pd); }
-        const pc = createPeerConnection(peerName);
-        pd.pc = pc;
-        if (_localStream) _localStream.getTracks().forEach(t => pc.addTrack(t, _localStream));
-        try {
-          await pc.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp }));
-          if (pc._flushIce) pc._flushIce();
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          sendWs({ type: "call-answer", to: peerName, sdp: answer.sdp });
-        } catch (e) { console.error("handleGroupOffer error:", e); }
-      }
-
-      function handleGroupPeerLeft(peerName) {
-        const pd = groupPeers.get(peerName);
-        if (pd && pd.pc) { try { pd.pc.close(); } catch (e) {} }
-        groupPeers.delete(peerName);
-        removePeerTile(peerName);
-      }
-
-      function leaveGroupCall() {
-        if (groupAnnounceTimer) { clearInterval(groupAnnounceTimer); groupAnnounceTimer = null; }
-        activeGroupCallMembers.delete(username);
-        const remaining = activeGroupCallMembers.size;
-        sendWs({ type: remaining > 0 ? "call-group-leave" : "call-group-ended" });
-        for (const [, pd] of groupPeers) {
-          if (pd.pc) { try { pd.pc.close(); } catch (e) {} }
-        }
-        groupPeers.clear();
-        activeGroupCallMembers.clear();
-        if (_localStream) { _localStream.getTracks().forEach(t => t.stop()); _localStream = null; }
-        callState = null; isGroupCall = false; callPeer = null; pendingOffer = null;
-        if (groupCallWindow) { try { groupCallWindow.remove(); } catch (e) {} groupCallWindow = null; }
-        hideIncomingCallBanner();
         if (wsPaused) closeWs();
-        renderUserList(); // refresh panel to remove join button
       }
 
-      // FIX 3 (core): createPeerConnection with ICE candidate queue + group call routing
+      // FIX: createPeerConnection with ICE candidate queue + robust school-WiFi handling
       function createPeerConnection(targetUsername) {
-        const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+        const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, iceCandidatePoolSize: 10, bundlePolicy: "max-bundle" });
         const iceCandidateQueue = [];
         let remoteDescSet = false;
 
@@ -2374,42 +1923,38 @@
         pc.onicecandidate = (e) => {
           if (e.candidate) sendWs({ type: "call-ice", to: targetUsername, candidate: e.candidate });
         };
+
         pc.oniceconnectionstatechange = () => {
           const s = pc.iceConnectionState;
-          if (!isGroupCall) {
-            if (s === "connected" || s === "completed") { callState = "active"; updateCallStatus("🟢 Connected"); }
-            if (s === "failed")       { updateCallStatus("❌ Connection failed"); endCall("failed"); }
-            if (s === "disconnected") updateCallStatus("⚠️ Reconnecting...");
+          if (s === "connected" || s === "completed") {
+            callState = "active";
+            if (callTimeoutTimer) { clearTimeout(callTimeoutTimer); callTimeoutTimer = null; }
+            updateCallStatus("🟢 Connected");
           }
+          if (s === "checking") updateCallStatus("⏳ Connecting...");
+          if (s === "disconnected") updateCallStatus("⚠️ Reconnecting...");
+          if (s === "failed") { updateCallStatus("❌ Failed — try on different WiFi"); endCall("failed"); }
         };
+
         pc.ontrack = (e) => {
           const stream = (e.streams && e.streams[0]) ? e.streams[0] : (() => {
             if (!pc._remoteStream) pc._remoteStream = new MediaStream();
             pc._remoteStream.addTrack(e.track);
             return pc._remoteStream;
           })();
-          if (isGroupCall) {
-            const pd = groupPeers.get(targetUsername);
-            if (pd) {
-              pd.stream = stream;
-              if (pd.videoEl) { pd.videoEl.srcObject = stream; pd.videoEl.play().catch(() => {}); }
-              else { pd.videoEl = addPeerTile(targetUsername, stream); }
-            }
-          } else {
-            setRemoteStream(stream);
-          }
+          setRemoteStream(stream);
         };
+
         return pc;
       }
 
       const ctrl = {
-        get currentUsers()           { return currentUsers; },
-        get callState()              { return callState; },
-        get _localStream()           { return _localStream; },
-        get activeGroupCallMembers() { return activeGroupCallMembers; },
+        get currentUsers()  { return currentUsers; },
+        get callState()     { return callState; },
+        get _localStream()  { return _localStream; },
         startCall,
-        acceptCall() { if (isGroupCall) acceptGroupCall(); else acceptCall_1to1(); },
-        rejectCall, endCall, startGroupCall, acceptGroupCall, leaveGroupCall,
+        acceptCall() { acceptCall_1to1(); },
+        rejectCall, endCall,
         isUserAtBottom() {
           return (msgBox.scrollHeight - (msgBox.scrollTop + msgBox.clientHeight)) < 80;
         },
@@ -2485,6 +2030,8 @@
         stop() {
           wsActive = false; wsPaused = true; closeWs();
           if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+          document.removeEventListener("visibilitychange", onVisibilityChange);
+          window.removeEventListener("pageshow", onPageShow);
         },
         pause() {
           wsPaused = true;
